@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ludo Mono</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text x=%2250%22 y=%2275%22 font-size=%2280%22 text-anchor=%22middle%22>%F0%9F%9F%A2</text></svg>">
+<style>
+:root {
+--bg: #050a05;
+--primary: #4af626;
+--secondary: #2b8a15;
+--border: #1a4d1a;
+--pawn-green: #4af626;
+--pawn-blue: #2b8a15;
+--pawn-red: #1d5a18;
+--pawn-yellow: #3ec820;
+}
+* {
+box-sizing: border-box;
+cursor: crosshair;
+}
+body {
+margin: 0;
+background-color: var(--bg);
+color: var(--primary);
+font-family: 'Courier New', Courier, monospace;
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+min-height: 100vh;
+overflow: hidden;
+padding: 10px;
+}
+#game-container {
+display: flex;
+flex-wrap: wrap;
+gap: 10px;
+align-items: flex-start;
+justify-content: center;
+position: relative;
+}
+svg {
+width: 90vmin;
+height: 90vmin;
+border: 2px solid var(--border);
+background-color: var(--bg);
+}
+#ui-panel {
+display: flex;
+flex-direction: column;
+gap: 8px;
+width: 220px;
+padding: 10px;
+border: 2px solid var(--border);
+background: rgba(26, 77, 26, 0.05);
+}
+#dice-box {
+height: 60px;
+display: flex;
+align-items: center;
+justify-content: center;
+font-size: 32px;
+border: 1px solid var(--border);
+margin-bottom: 5px;
+background: var(--bg);
+}
+.btn {
+background: var(--bg);
+color: var(--primary);
+border: 1px solid var(--border);
+padding: 10px;
+font-family: inherit;
+font-weight: bold;
+text-transform: uppercase;
+font-size: 12px;
+}
+.btn:hover:not(:disabled) {
+background: var(--border);
+color: var(--bg);
+}
+.btn:disabled {
+opacity: 0.3;
+filter: grayscale(1);
+}
+.btn.active {
+background: var(--secondary);
+color: var(--bg);
+}
+#status-msg {
+font-size: 11px;
+line-height: 1.2;
+text-transform: uppercase;
+min-height: 3em;
+color: var(--secondary);
+}
+.pawn {
+stroke: var(--bg);
+stroke-width: 0.5;
+transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.pawn.green { fill: var(--pawn-green); }
+.pawn.blue { fill: var(--pawn-blue); }
+.pawn.red { fill: var(--pawn-red); }
+.pawn.yellow { fill: var(--pawn-yellow); }
+.movable {
+stroke: var(--primary);
+stroke-width: 1;
+filter: drop-shadow(0 0 2px var(--primary));
+}
+#overlay-start, #overlay-win {
+position: absolute;
+inset: 0;
+background: var(--bg);
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+z-index: 100;
+text-align: center;
+border: 2px solid var(--border);
+}
+#overlay-win {
+display: none;
+background: rgba(5, 10, 5, 0.9);
+pointer-events: none;
+}
+.show { display: flex !important; }
+h1 {
+font-size: 40px;
+margin: 0 0 10px 0;
+letter-spacing: 5px;
+}
+.scanline {
+width: 100%;
+height: 2px;
+background: rgba(74, 246, 38, 0.03);
+position: fixed;
+top: 0;
+left: 0;
+pointer-events: none;
+animation: scan 4s linear infinite;
+}
+@keyframes scan {
+from { top: 0; }
+to { top: 100%; }
+}
+.finished-anim {
+animation: fadeOut 0.5s forwards;
+}
+@keyframes fadeOut {
+to { opacity: 0; transform: scale(2); }
+}
+#cr-notice {
+position: fixed;
+bottom: 5px;
+right: 5px;
+font-size: 9px;
+color: var(--border);
+}
+.cell-border { stroke: var(--border); stroke-width: 0.3; }
+.bg-green { fill: rgba(74, 246, 38, 0.1); }
+.bg-blue { fill: rgba(43, 138, 21, 0.1); }
+.bg-red { fill: rgba(26, 77, 26, 0.1); }
+.bg-yellow { fill: rgba(62, 200, 32, 0.1); }
+.bg-empty { fill: var(--bg); }
+</style>
+</head>
+<body>
+<div id="jh-copyright-vertical" style="position: fixed; top: 10px; right: 4px; z-index: 9999; writing-mode: vertical-rl; color: #008800; font-family: sans-serif; font-size: 14px; pointer-events: none; white-space: nowrap; letter-spacing: 0.5px;">&copy; Johnny Heggelund</div>
+<div class="scanline"></div>
+<div id="cr-notice">SYS_REF: JH_E01</div>
+<div id="overlay-start">
+<h1>LUDO_OS</h1>
+<p style="font-size: 10px; color: var(--secondary);">INITIALIZING GAME SEQUENCE...</p>
+<button id="init-btn" class="btn" style="margin-top: 20px; width: 150px;">BOOT</button>
+</div>
+<div id="game-container">
+<div id="overlay-win">
+<h1 id="win-txt">WINNER</h1>
+</div>
+<svg viewBox="0 0 150 150" xmlns="http://www.w3.org/2000/svg">
+<g id="grid-base">
+<rect class="bg-empty cell-border" x="0" y="0" width="150" height="150" />
+<rect class="bg-green cell-border" x="0" y="0" width="60" height="60" />
+<rect class="bg-blue cell-border" x="90" y="0" width="60" height="60" />
+<rect class="bg-yellow cell-border" x="0" y="90" width="60" height="60" />
+<rect class="bg-red cell-border" x="90" y="90" width="60" height="60" />
+<rect class="bg-empty cell-border" x="10" y="10" width="40" height="40" />
+<rect class="bg-empty cell-border" x="100" y="10" width="40" height="40" />
+<rect class="bg-empty cell-border" x="10" y="100" width="40" height="40" />
+<rect class="bg-empty cell-border" x="100" y="100" width="40" height="40" />
+</g>
+<g id="path-cells">
+<rect class="bg-empty cell-border" x="60" y="0" width="10" height="10" /><rect class="bg-empty cell-border" x="60" y="10" width="10" height="10" /><rect class="bg-empty cell-border" x="60" y="20" width="10" height="10" /><rect class="bg-empty cell-border" x="60" y="30" width="10" height="10" /><rect class="bg-empty cell-border" x="60" y="40" width="10" height="10" /><rect class="bg-empty cell-border" x="60" y="50" width="10" height="10" />
+<rect class="bg-empty cell-border" x="80" y="0" width="10" height="10" /><rect class="bg-blue cell-border" x="80" y="10" width="10" height="10" /><rect class="bg-empty cell-border" x="80" y="20" width="10" height="10" /><rect class="bg-empty cell-border" x="80" y="30" width="10" height="10" /><rect class="bg-empty cell-border" x="80" y="40" width="10" height="10" /><rect class="bg-empty cell-border" x="80" y="50" width="10" height="10" />
+<rect class="bg-empty cell-border" x="90" y="60" width="10" height="10" /><rect class="bg-empty cell-border" x="100" y="60" width="10" height="10" /><rect class="bg-empty cell-border" x="110" y="60" width="10" height="10" /><rect class="bg-empty cell-border" x="120" y="60" width="10" height="10" /><rect class="bg-empty cell-border" x="130" y="60" width="10" height="10" /><rect class="bg-empty cell-border" x="140" y="60" width="10" height="10" />
+<rect class="bg-empty cell-border" x="90" y="80" width="10" height="10" /><rect class="bg-empty cell-border" x="100" y="80" width="10" height="10" /><rect class="bg-empty cell-border" x="110" y="80" width="10" height="10" /><rect class="bg-empty cell-border" x="120" y="80" width="10" height="10" /><rect class="bg-red cell-border" x="130" y="80" width="10" height="10" /><rect class="bg-empty cell-border" x="140" y="80" width="10" height="10" />
+<rect class="bg-empty cell-border" x="60" y="90" width="10" height="10" /><rect class="bg-empty cell-border" x="60" y="100" width="10" height="10" /><rect class="bg-empty cell-border" x="60" y="110" width="10" height="10" /><rect class="bg-empty cell-border" x="60" y="120" width="10" height="10" /><rect class="bg-yellow cell-border" x="60" y="130" width="10" height="10" /><rect class="bg-empty cell-border" x="60" y="140" width="10" height="10" />
+<rect class="bg-empty cell-border" x="80" y="90" width="10" height="10" /><rect class="bg-empty cell-border" x="80" y="100" width="10" height="10" /><rect class="bg-empty cell-border" x="80" y="110" width="10" height="10" /><rect class="bg-empty cell-border" x="80" y="120" width="10" height="10" /><rect class="bg-empty cell-border" x="80" y="130" width="10" height="10" /><rect class="bg-empty cell-border" x="80" y="140" width="10" height="10" />
+<rect class="bg-empty cell-border" x="0" y="60" width="10" height="10" /><rect class="bg-green cell-border" x="10" y="60" width="10" height="10" /><rect class="bg-empty cell-border" x="20" y="60" width="10" height="10" /><rect class="bg-empty cell-border" x="30" y="60" width="10" height="10" /><rect class="bg-empty cell-border" x="40" y="60" width="10" height="10" /><rect class="bg-empty cell-border" x="50" y="60" width="10" height="10" />
+<rect class="bg-empty cell-border" x="0" y="80" width="10" height="10" /><rect class="bg-empty cell-border" x="10" y="80" width="10" height="10" /><rect class="bg-empty cell-border" x="20" y="80" width="10" height="10" /><rect class="bg-empty cell-border" x="30" y="80" width="10" height="10" /><rect class="bg-empty cell-border" x="40" y="80" width="10" height="10" /><rect class="bg-empty cell-border" x="50" y="80" width="10" height="10" />
+</g>
+<g id="home-paths">
+<rect class="bg-blue cell-border" x="70" y="10" width="10" height="10" /><rect class="bg-blue cell-border" x="70" y="20" width="10" height="10" /><rect class="bg-blue cell-border" x="70" y="30" width="10" height="10" /><rect class="bg-blue cell-border" x="70" y="40" width="10" height="10" /><rect class="bg-blue cell-border" x="70" y="50" width="10" height="10" />
+<rect class="bg-red cell-border" x="90" y="70" width="10" height="10" /><rect class="bg-red cell-border" x="100" y="70" width="10" height="10" /><rect class="bg-red cell-border" x="110" y="70" width="10" height="10" /><rect class="bg-red cell-border" x="120" y="70" width="10" height="10" /><rect class="bg-red cell-border" x="130" y="70" width="10" height="10" />
+<rect class="bg-yellow cell-border" x="70" y="90" width="10" height="10" /><rect class="bg-yellow cell-border" x="70" y="100" width="10" height="10" /><rect class="bg-yellow cell-border" x="70" y="110" width="10" height="10" /><rect class="bg-yellow cell-border" x="70" y="120" width="10" height="10" /><rect class="bg-yellow cell-border" x="70" y="130" width="10" height="10" />
+<rect class="bg-green cell-border" x="10" y="70" width="10" height="10" /><rect class="bg-green cell-border" x="20" y="70" width="10" height="10" /><rect class="bg-green cell-border" x="30" y="70" width="10" height="10" /><rect class="bg-green cell-border" x="40" y="70" width="10" height="10" /><rect class="bg-green cell-border" x="50" y="70" width="10" height="10" />
+</g>
+<g id="finish-quads">
+<polygon class="bg-blue cell-border" points="60,60 90,60 75,75" />
+<polygon class="bg-red cell-border" points="90,60 90,90 75,75" />
+<polygon class="bg-yellow cell-border" points="90,90 60,90 75,75" />
+<polygon class="bg-green cell-border" points="60,90 60,60 75,75" />
+</g>
+<g id="pawns-container">
+<circle id="green-1" class="pawn green" cx="0" cy="0" r="4" />
+<circle id="green-2" class="pawn green" cx="0" cy="0" r="4" />
+<circle id="green-3" class="pawn green" cx="0" cy="0" r="4" />
+<circle id="green-4" class="pawn green" cx="0" cy="0" r="4" />
+<rect id="blue-1" class="pawn blue" x="-3.5" y="-3.5" width="7" height="7" />
+<rect id="blue-2" class="pawn blue" x="-3.5" y="-3.5" width="7" height="7" />
+<rect id="blue-3" class="pawn blue" x="-3.5" y="-3.5" width="7" height="7" />
+<rect id="blue-4" class="pawn blue" x="-3.5" y="-3.5" width="7" height="7" />
+<polygon id="yellow-1" class="pawn yellow" points="0,-4.5 4.5,0 0,4.5 -4.5,0" />
+<polygon id="yellow-2" class="pawn yellow" points="0,-4.5 4.5,0 0,4.5 -4.5,0" />
+<polygon id="yellow-3" class="pawn yellow" points="0,-4.5 4.5,0 0,4.5 -4.5,0" />
+<polygon id="yellow-4" class="pawn yellow" points="0,-4.5 4.5,0 0,4.5 -4.5,0" />
+<polygon id="red-1" class="pawn red" points="0,-4.5 4.5,4 -4.5,4" />
+<polygon id="red-2" class="pawn red" points="0,-4.5 4.5,4 -4.5,4" />
+<polygon id="red-3" class="pawn red" points="0,-4.5 4.5,4 -4.5,4" />
+<polygon id="red-4" class="pawn red" points="0,-4.5 4.5,4 -4.5,4" />
+</g>
+</svg>
+<div id="ui-panel">
+<div id="dice-box">?</div>
+<button id="roll-btn" class="btn">EXEC ROLL</button>
+<button id="auto-btn" class="btn">AUTO_PILOT</button>
+<div id="status-msg">READY.</div>
+</div>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+class LudoGame {
+AI_THINK_TIME = 1500;
+AI_MOVE_DELAY = 1000;
+NO_MOVES_DELAY = 1500;
+NEXT_TURN_DELAY = 500;
+TEMP_MESSAGE_DURATION = 2500;
+COLORS = ['green', 'blue', 'red', 'yellow'];
+START_POSITIONS = { green: 1, blue: 14, red: 27, yellow: 40 };
+HOME_STRETCH_LENGTH = 6;
+MAIN_PATH_LENGTH = 52;
+STEPS_TO_HOME_STRETCH = 51;
+PATH_COORDS = [
+null,
+{ x: 15, y: 65 }, { x: 25, y: 65 }, { x: 35, y: 65 }, { x: 45, y: 65 }, { x: 55, y: 65 },
+{ x: 65, y: 55 }, { x: 65, y: 45 }, { x: 65, y: 35 }, { x: 65, y: 25 }, { x: 65, y: 15 },
+{ x: 65, y: 5 }, { x: 75, y: 5 }, { x: 85, y: 5 }, { x: 85, y: 15 }, { x: 85, y: 25 },
+{ x: 85, y: 35 }, { x: 85, y: 45 }, { x: 85, y: 55 }, { x: 95, y: 65 }, { x: 105, y: 65 },
+{ x: 115, y: 65 }, { x: 125, y: 65 }, { x: 135, y: 65 }, { x: 145, y: 65 }, { x: 145, y: 75 },
+{ x: 145, y: 85 }, { x: 135, y: 85 }, { x: 125, y: 85 }, { x: 115, y: 85 }, { x: 105, y: 85 },
+{ x: 95, y: 85 }, { x: 85, y: 95 }, { x: 85, y: 105 }, { x: 85, y: 115 }, { x: 85, y: 125 },
+{ x: 85, y: 135 }, { x: 85, y: 145 }, { x: 75, y: 145 }, { x: 65, y: 145 }, { x: 65, y: 135 },
+{ x: 65, y: 125 }, { x: 65, y: 115 }, { x: 65, y: 105 }, { x: 65, y: 95 }, { x: 55, y: 85 },
+{ x: 45, y: 85 }, { x: 35, y: 85 }, { x: 25, y: 85 }, { x: 15, y: 85 }, { x: 5, y: 85 },
+{ x: 5, y: 75 }, { x: 5, y: 65 }
+];
+HOME_STRETCH_COORDS = {
+green: [null, { x: 15, y: 75 }, { x: 25, y: 75 }, { x: 35, y: 75 }, { x: 45, y: 75 }, { x: 55, y: 75 }, { x: 65, y: 75 }],
+blue: [null, { x: 75, y: 15 }, { x: 75, y: 25 }, { x: 75, y: 35 }, { x: 75, y: 45 }, { x: 75, y: 55 }, { x: 75, y: 65 }],
+red: [null, { x: 135, y: 75 }, { x: 125, y: 75 }, { x: 115, y: 75 }, { x: 105, y: 75 }, { x: 95, y: 75 }, { x: 85, y: 75 }],
+yellow: [null, { x: 75, y: 135 }, { x: 75, y: 125 }, { x: 75, y: 115 }, { x: 75, y: 105 }, { x: 75, y: 95 }, { x: 75, y: 85 }]
+};
+HOME_YARD_COORDS = {
+green: [{ x: 20, y: 20 }, { x: 40, y: 20 }, { x: 20, y: 40 }, { x: 40, y: 40 }],
+blue: [{ x: 110, y: 20 }, { x: 130, y: 20 }, { x: 110, y: 40 }, { x: 130, y: 40 }],
+yellow: [{ x: 20, y: 110 }, { x: 40, y: 110 }, { x: 20, y: 130 }, { x: 40, y: 130 }],
+red: [{ x: 110, y: 110 }, { x: 130, y: 110 }, { x: 110, y: 130 }, { x: 130, y: 130 }]
+};
+constructor() {
+this.rollButton = document.getElementById('roll-btn');
+this.diceDisplay = document.getElementById('dice-box');
+this.messageBox = document.getElementById('status-msg');
+this.pawnsContainer = document.getElementById('pawns-container');
+this.winnerOverlay = document.getElementById('overlay-win');
+this.winnerTxt = document.getElementById('win-txt');
+this.autopilotButton = document.getElementById('auto-btn');
+this.startGameButton = document.getElementById('init-btn');
+this.gameStartOverlay = document.getElementById('overlay-start');
+this.state = {
+currentPlayerIndex: 0,
+diceValue: 0,
+pawns: {},
+isRolling: false,
+isAITurn: false,
+isGameOver: false,
+isAutopilotOn: false,
+rollsInCurrentTurn: 0,
+consecutiveSixes: 0
+};
+this.init();
+}
+init() {
+this.COLORS.forEach((color) => {
+for (let i = 1; i <= 4; i++) {
+const pawnId = `${color}-${i}`;
+this.state.pawns[pawnId] = {
+id: pawnId,
+color: color,
+position: 'home',
+pathIndex: 0
+};
+}
+});
+this.updateAllPawnPositions();
+this.adjustForStackedPawns();
+this.setupEventListeners();
+}
+determineFirstPlayer() {
+this.rollButton.disabled = true;
+this.autopilotButton.disabled = true;
+this.state.isRolling = true;
+this.messageBox.textContent = 'SEQ_CALC: PRIORITY...';
+let rollCount = 0;
+const initialRollInterval = setInterval(() => {
+this.diceDisplay.textContent = Math.floor(Math.random() * 6) + 1;
+if (++rollCount > 10) {
+clearInterval(initialRollInterval);
+const { startingIndex, highestRoll } = this._executeInitialRolls();
+this.state.currentPlayerIndex = startingIndex;
+const starterColor = this.COLORS[startingIndex];
+this.diceDisplay.textContent = highestRoll;
+this.messageBox.textContent = `P${startingIndex + 1}_INIT: ROLL_${highestRoll} [START]`;
+this.updateTurnDisplay();
+this.state.isRolling = false;
+this.autopilotButton.disabled = false;
+this.startNextPlayerTurn();
+}
+}, 100);
+}
+_executeInitialRolls() {
+let highestRoll = -1;
+let startingIndex = 0;
+for (let i = 0; i < 4; i++) {
+const roll = Math.floor(Math.random() * 6) + 1;
+if (roll > highestRoll) {
+highestRoll = roll;
+startingIndex = i;
+}
+}
+return { startingIndex, highestRoll };
+}
+handleStartGame() {
+this.gameStartOverlay.style.display = 'none';
+this.determineFirstPlayer();
+}
+setupEventListeners() {
+this.rollButton.addEventListener('click', () => this.rollDice());
+this.autopilotButton.addEventListener('click', () => this.toggleAutopilot());
+this.startGameButton.addEventListener('click', () => this.handleStartGame());
+this.pawnsContainer.addEventListener('click', (e) => {
+if (this.state.isGameOver || this.state.isAITurn) return;
+if (e.target.classList.contains('movable')) {
+this.movePawn(e.target.id);
+}
+});
+}
+toggleAutopilot() {
+this.state.isAutopilotOn = !this.state.isAutopilotOn;
+this.autopilotButton.classList.toggle('active', this.state.isAutopilotOn);
+this.autopilotButton.textContent = this.state.isAutopilotOn ? 'AUTO: ON' : 'AUTO: OFF';
+if (this.state.isAutopilotOn && this.COLORS[this.state.currentPlayerIndex] === 'green' && !this.state.isRolling) {
+this.state.isAITurn = true;
+this.rollButton.disabled = true;
+this.startNextPlayerTurn();
+}
+}
+updateAllPawnPositions() {
+for (const pawnId in this.state.pawns) {
+this.updatePawnPosition(pawnId);
+}
+}
+updatePawnPosition(pawnId) {
+const pawn = this.state.pawns[pawnId];
+const el = document.getElementById(pawnId);
+if (!el) return;
+el.style.display = pawn.position === 'finished' ? 'none' : '';
+const coords = this.getPawnCoords(pawn);
+if (coords) {
+el.style.transform = `translate(${coords.x}px, ${coords.y}px)`;
+}
+}
+adjustForStackedPawns() {
+Object.values(this.state.pawns).forEach(pawn => {
+if (pawn.position !== 'finished' && pawn.position !== 'home') {
+const el = document.getElementById(pawn.id);
+if (el) {
+const coords = this.getPawnCoords(pawn);
+el.style.transform = `translate(${coords.x}px, ${coords.y}px)`;
+}
+}
+});
+const locations = new Map();
+Object.values(this.state.pawns).forEach(pawn => {
+if (pawn.position === 'finished' || pawn.position === 'home') return;
+let key = pawn.position === 'in-stretch' ?
+`${pawn.color}-${pawn.position}-${pawn.pathIndex}` :
+`${pawn.position}-${pawn.pathIndex}`;
+if (!locations.has(key)) {
+locations.set(key, []);
+}
+locations.get(key).push(pawn.id);
+});
+for (const pawnIdsOnSquare of locations.values()) {
+if (pawnIdsOnSquare.length > 1) {
+const angleStep = (2 * Math.PI) / pawnIdsOnSquare.length;
+const radius = 2.5;
+pawnIdsOnSquare.forEach((pawnId, index) => {
+const el = document.getElementById(pawnId);
+const pawn = this.state.pawns[pawnId];
+if (el) {
+const baseCoords = this.getPawnCoords(pawn);
+const dx = radius * Math.cos(index * angleStep);
+const dy = radius * Math.sin(index * angleStep);
+el.style.transform = `translate(${baseCoords.x}px, ${baseCoords.y}px) translate(${dx.toFixed(2)}px, ${dy.toFixed(2)}px)`;
+}
+});
+}
+}
+}
+getPawnCoords(pawn) {
+switch (pawn.position) {
+case 'home':
+return this.HOME_YARD_COORDS[pawn.color][parseInt(pawn.id.split('-')[1]) - 1];
+case 'in-play':
+return this.PATH_COORDS[pawn.pathIndex];
+case 'in-stretch':
+return this.HOME_STRETCH_COORDS[pawn.color][pawn.pathIndex];
+default:
+return null;
+}
+}
+updateTurnDisplay() {
+if (this.state.isGameOver) return;
+const color = this.COLORS[this.state.currentPlayerIndex];
+this.messageBox.textContent = `ACTIVE: ${color.toUpperCase()}`;
+this.diceDisplay.style.color = `var(--pawn-${color})`;
+this.diceDisplay.style.borderColor = `var(--pawn-${color})`;
+}
+highlightMovablePawns(pawnIds, shouldHighlight) {
+document.querySelectorAll('.pawn').forEach(p => p.classList.remove('movable'));
+if (shouldHighlight) {
+pawnIds.forEach(id => {
+const el = document.getElementById(id);
+if (el) {
+el.classList.add('movable');
+el.parentElement.appendChild(el);
+}
+});
+}
+}
+showTemporaryMessage(message, color) {
+this.winnerTxt.textContent = message;
+this.winnerTxt.style.color = `var(--pawn-${color})`;
+this.winnerOverlay.classList.add('show');
+setTimeout(() => {
+this.winnerOverlay.classList.remove('show');
+}, this.TEMP_MESSAGE_DURATION);
+}
+startNextPlayerTurn() {
+const currentPlayerColor = this.COLORS[this.state.currentPlayerIndex];
+this.state.isAITurn = currentPlayerColor !== 'green' || this.state.isAutopilotOn;
+this.rollButton.disabled = this.state.isAITurn || this.state.isRolling;
+if (this.state.isAITurn) {
+setTimeout(() => this.playAITurn(), this.AI_THINK_TIME);
+}
+}
+switchPlayer() {
+if (this.state.isGameOver) return;
+this.state.currentPlayerIndex = (this.state.currentPlayerIndex + 1) % this.COLORS.length;
+this.state.rollsInCurrentTurn = 0;
+this.state.consecutiveSixes = 0;
+this.updateTurnDisplay();
+this.startNextPlayerTurn();
+}
+rollDice() {
+if (this.state.isRolling || this.state.isGameOver) return;
+this.state.rollsInCurrentTurn++;
+this.state.isRolling = true;
+this.rollButton.disabled = true;
+let rollCount = 0;
+const interval = setInterval(() => {
+this.diceDisplay.textContent = Math.floor(Math.random() * 6) + 1;
+if (++rollCount > 5) {
+clearInterval(interval);
+this.state.diceValue = Math.floor(Math.random() * 6) + 1;
+this.diceDisplay.textContent = this.state.diceValue;
+this.state.isRolling = false;
+if (this.state.diceValue === 6) {
+this.state.consecutiveSixes++;
+} else {
+this.state.consecutiveSixes = 0;
+}
+this.handlePostRoll();
+}
+}, 100);
+}
+handlePostRoll() {
+if (this.state.diceValue === 6 && this.state.consecutiveSixes >= 3) {
+this.messageBox.textContent = `ERR: 6_TRIPLE. TURN_SKIP.`;
+this.state.consecutiveSixes = 0;
+this.state.rollsInCurrentTurn = 0;
+setTimeout(() => this.switchPlayer(), this.NO_MOVES_DELAY);
+return;
+}
+const color = this.COLORS[this.state.currentPlayerIndex];
+this.messageBox.textContent = `${color.toUpperCase()}: ROLL_${this.state.diceValue}`;
+const movablePawns = this.findMovablePawns(color, this.state.diceValue);
+if (movablePawns.length === 0) {
+const allPawnsAtHome = Object.values(this.state.pawns)
+.filter(p => p.color === color)
+.every(p => p.position === 'home');
+if (allPawnsAtHome && this.state.diceValue !== 6 && this.state.rollsInCurrentTurn < 3) {
+this.messageBox.textContent = `RE_ROLL: ${this.state.rollsInCurrentTurn}/3`;
+this.state.isRolling = false;
+if (this.state.isAITurn) {
+setTimeout(() => this.playAITurn(), this.AI_MOVE_DELAY);
+} else {
+this.rollButton.disabled = false;
+}
+} else if (this.state.diceValue === 6) {
+this.messageBox.textContent += ` [BONUS_6]`;
+this.state.isRolling = false;
+if (this.state.isAITurn) {
+setTimeout(() => this.playAITurn(), this.AI_MOVE_DELAY);
+} else {
+this.rollButton.disabled = false;
+}
+} else {
+this.messageBox.textContent += ' NO_MOVES. SKIP.';
+this.state.consecutiveSixes = 0;
+this.state.rollsInCurrentTurn = 0;
+setTimeout(() => this.switchPlayer(), this.NO_MOVES_DELAY);
+}
+} else {
+if (this.state.isAITurn) {
+const chosenPawnId = this.chooseAIPawn(movablePawns, this.state.diceValue, color);
+setTimeout(() => this.movePawn(chosenPawnId), this.AI_MOVE_DELAY);
+} else {
+this.highlightMovablePawns(movablePawns, true);
+}
+}
+}
+calculateNewPosition(pawn, dice) {
+if (pawn.position === 'home') {
+if (dice !== 6) return { position: pawn.position, pathIndex: pawn.pathIndex };
+return { position: 'in-play', pathIndex: this.START_POSITIONS[pawn.color] };
+}
+if (pawn.position === 'in-stretch') {
+const newIndex = pawn.pathIndex + dice;
+if (newIndex > this.HOME_STRETCH_LENGTH) return { position: null, pathIndex: null };
+for (let i = pawn.pathIndex + 1; i < newIndex; i++) {
+const blockers = Object.values(this.state.pawns).filter(p => p.color === pawn.color && p.position === 'in-stretch' && p.pathIndex === i);
+if (blockers.length > 0) return { position: null, pathIndex: null };
+}
+return { position: newIndex === this.HOME_STRETCH_LENGTH ? 'finished' : 'in-stretch', pathIndex: newIndex };
+}
+if (pawn.position === 'in-play') {
+const currentRelativePos = this.getRelativeBoardPosition(pawn);
+const newRelativePos = currentRelativePos + dice;
+if (newRelativePos >= this.STEPS_TO_HOME_STRETCH) {
+const stretchIndex = newRelativePos - this.STEPS_TO_HOME_STRETCH + 1;
+if (stretchIndex > this.HOME_STRETCH_LENGTH) return { position: null, pathIndex: null };
+return { position: stretchIndex === this.HOME_STRETCH_LENGTH ? 'finished' : 'in-stretch', pathIndex: stretchIndex };
+} else {
+let newAbsIndex = (pawn.pathIndex + dice - 1) % this.MAIN_PATH_LENGTH + 1;
+return { position: 'in-play', pathIndex: newAbsIndex };
+}
+}
+return { position: pawn.position, pathIndex: pawn.pathIndex };
+}
+chooseAIPawn(movablePawns, dice, color) {
+if (movablePawns.length === 1) return movablePawns[0];
+const scoredMoves = movablePawns.map(pawnId => {
+const pawn = this.state.pawns[pawnId];
+const { position: newPosition, pathIndex: newPathIndex } = this.calculateNewPosition(pawn, dice);
+let score = 0;
+if (newPosition === 'finished') score += 1000;
+if (newPosition === 'in-play') {
+const opponents = this.getPawnsOnSquare(newPathIndex, 'in-play').filter(p => p.color !== color);
+const opponentCounts = {};
+opponents.forEach(p => {
+opponentCounts[p.color] = (opponentCounts[p.color] || 0) + 1;
+});
+const hasBlock = Object.values(opponentCounts).some(count => count >= 2);
+if (hasBlock) {
+score -= 2000;
+} else {
+opponents.forEach(opp => {
+const isSafe = this.START_POSITIONS[opp.color] === opp.pathIndex;
+if (!isSafe) score += 500;
+});
+}
+}
+const own = this.getPawnsOnSquare(newPathIndex, newPosition).filter(p => p.color === color && p.id !== pawnId);
+if (own.length === 1) score += 150;
+if (pawn.position === 'home' && dice === 6) score += 200;
+const progress = this.getRelativeBoardPosition(pawn);
+score += progress;
+return { pawnId, score };
+});
+scoredMoves.sort((a, b) => b.score - a.score);
+return scoredMoves[0].pawnId;
+}
+movePawn(pawnId) {
+this.highlightMovablePawns([], false);
+this.rollButton.disabled = true;
+const pawn = this.state.pawns[pawnId];
+const { position: newPosition, pathIndex: newPathIndex } = this.calculateNewPosition(pawn, this.state.diceValue);
+if (newPosition === null) {
+this.finishMove(false);
+return;
+}
+pawn.position = newPosition;
+pawn.pathIndex = newPathIndex;
+this.updatePawnPosition(pawnId);
+if (pawn.position === 'in-play' || pawn.position === 'in-stretch') {
+this.handleLanding(pawn);
+}
+if (pawn.position === 'finished') {
+pawn.pathIndex = 0;
+this.showTemporaryMessage('NODE_COMPLETE', pawn.color);
+const el = document.getElementById(pawnId);
+if (el) {
+el.classList.add('finished-anim');
+setTimeout(() => el.style.display = 'none', 500);
+}
+}
+this.adjustForStackedPawns();
+if (this.checkWinner(pawn.color)) {
+this.state.isGameOver = true;
+this.rollButton.disabled = true;
+this.autopilotButton.disabled = true;
+this.messageBox.innerHTML = `COMPLETE. <a href="javascript:location.reload()" style="color:var(--primary)">REBOOT</a>`;
+this.showTemporaryMessage(`${pawn.color.toUpperCase()} WINS`, pawn.color);
+} else {
+this.finishMove(this.state.diceValue === 6);
+}
+}
+finishMove(bonusRoll) {
+if (bonusRoll) {
+this.messageBox.textContent = `SEQ_EXT: BONUS.`;
+this.state.isRolling = false;
+if (this.state.isAITurn) {
+setTimeout(() => this.playAITurn(), this.AI_MOVE_DELAY);
+} else {
+this.rollButton.disabled = false;
+}
+} else {
+this.state.consecutiveSixes = 0;
+this.state.rollsInCurrentTurn = 0;
+setTimeout(() => this.switchPlayer(), this.NEXT_TURN_DELAY);
+}
+}
+findMovablePawns(color, dice) {
+return Object.values(this.state.pawns)
+.filter(p => p.color === color && p.position !== 'finished')
+.filter(pawn => {
+if (pawn.position === 'home') {
+if (dice !== 6) return false;
+const startPos = this.START_POSITIONS[color];
+const pawnsOnStart = this.getPawnsOnSquare(startPos, 'in-play');
+const ownPawnsOnStart = pawnsOnStart.filter(p => p.color === color);
+return ownPawnsOnStart.length < 2;
+}
+const { position: newPos, pathIndex: newIndex } = this.calculateNewPosition(pawn, dice);
+if (newPos === null) return false;
+if (newPos === 'finished') return true;
+const occupyingPawns = this.getPawnsOnSquare(newIndex, newPos);
+const ownPawnsOnNewSquare = occupyingPawns.filter(p => p.color === color);
+if (ownPawnsOnNewSquare.length >= 2) return false;
+return true;
+})
+.map(p => p.id);
+}
+getRelativeBoardPosition(pawn) {
+if (pawn.position !== 'in-play') return -1;
+const startPoint = this.START_POSITIONS[pawn.color];
+return (pawn.pathIndex - startPoint + this.MAIN_PATH_LENGTH) % this.MAIN_PATH_LENGTH;
+}
+getPawnsOnSquare(pathIndex, position) {
+return Object.values(this.state.pawns).filter(p => p.position === position && p.pathIndex === pathIndex);
+}
+handleLanding(movedPawn) {
+const pawnsOnLandedSquare = this.getPawnsOnSquare(movedPawn.pathIndex, movedPawn.position);
+const others = pawnsOnLandedSquare.filter(p => p.id !== movedPawn.id);
+const opponentCounts = {};
+others.forEach(p => {
+if (p.color !== movedPawn.color) {
+opponentCounts[p.color] = (opponentCounts[p.color] || 0) + 1;
+}
+});
+const hasBlock = Object.values(opponentCounts).some(count => count >= 2);
+if (movedPawn.position === 'in-play' && hasBlock) {
+this.messageBox.textContent = `BLOCK_HIT. RETURN_HOME.`;
+movedPawn.position = 'home';
+movedPawn.pathIndex = 0;
+this.updatePawnPosition(movedPawn.id);
+return;
+}
+let knockedOutMessage = false;
+for (const pawnToKnock of others) {
+if (pawnToKnock.color !== movedPawn.color) {
+const isPawnSafe = this.START_POSITIONS[pawnToKnock.color] === pawnToKnock.pathIndex || pawnToKnock.position === 'in-stretch';
+if (!isPawnSafe) {
+pawnToKnock.position = 'home';
+pawnToKnock.pathIndex = 0;
+this.updatePawnPosition(pawnToKnock.id);
+if (!knockedOutMessage) {
+this.messageBox.textContent = `COLLISION: ${pawnToKnock.color.toUpperCase()} RESET.`;
+knockedOutMessage = true;
+}
+}
+}
+}
+}
+checkWinner(color) {
+return Object.values(this.state.pawns)
+.filter(p => p.color === color)
+.every(p => p.position === 'finished');
+}
+playAITurn() {
+if (this.state.isGameOver) return;
+this.rollDice();
+}
+}
+new LudoGame();
+});
+</script>
+</body>
+</html>

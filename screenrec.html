@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Screen Recorder</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text x=%2250%22 y=%2275%22 font-size=%2280%22 text-anchor=%22middle%22>%F0%9F%93%BC</text></svg>">
+  <style>
+    body {
+      background-color: #050505;
+      color: #e0e0e0;
+      margin: 0;
+      padding: 0;
+      font-family: system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+    .controls {
+      display: flex;
+      background-color: #0f0f0f;
+      border-bottom: 1px solid #222222;
+    }
+    button, select {
+      background-color: transparent;
+      color: #ffffff;
+      border: none;
+      border-right: 1px solid #222222;
+      cursor: pointer;
+      font-size: 0.8rem;
+      padding: 6px 12px;
+      flex-grow: 1;
+      transition: background-color 0.1s;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      outline: none;
+      margin: 0;
+      border-radius: 0;
+      appearance: none;
+      text-align: center;
+    }
+    button:hover:not(:disabled), select:hover {
+      background-color: #1a1a1a;
+    }
+    button:disabled {
+      color: #444444;
+      cursor: not-allowed;
+    }
+    option {
+      background-color: #0f0f0f;
+      color: #ffffff;
+    }
+    #video-preview {
+      flex-grow: 1;
+      background-color: #000000;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      cursor: none;
+    }
+    #status-bar {
+      background-color: #080808;
+      padding: 4px 8px;
+      font-family: monospace;
+      font-size: 0.75rem;
+      text-align: center;
+      border-top: 1px solid #222222;
+      color: #aaaaaa;
+    }
+  </style>
+</head>
+<body>
+  <div class="controls">
+    <select id="res-select">
+      <option value="720">720p</option>
+      <option value="1080">1080p</option>
+    </select>
+    <select id="fps-select">
+      <option value="60">60 FPS</option>
+      <option value="30">30 FPS</option>
+      <option value="24">24 FPS</option>
+    </select>
+    <select id="limit-select">
+      <option value="size-9.5">Discord (9.5 MB)</option>
+      <option value="time-1">1 Hour</option>
+      <option value="time-2">2 Hours</option>
+      <option value="time-3">3 Hours</option>
+      <option value="time-4">4 Hours</option>
+      <option value="none">Manual Stop</option>
+    </select>
+    <button id="start-btn">Start</button>
+    <button id="stop-btn" disabled>Stop</button>
+  </div>
+  <video id="video-preview" autoplay muted playsinline></video>
+  <div id="status-bar">Ready</div>
+
+  <script>
+    const resSelect = document.getElementById('res-select');
+    const fpsSelect = document.getElementById('fps-select');
+    const limitSelect = document.getElementById('limit-select');
+    const startBtn = document.getElementById('start-btn');
+    const stopBtn = document.getElementById('stop-btn');
+    const videoPreview = document.getElementById('video-preview');
+    const statusBar = document.getElementById('status-bar');
+    let mediaRecorder;
+    let recordedSize = 0;
+    let startTime = 0;
+    let limitType = '';
+    const maxSize = 9.5 * 1024 * 1024;
+    let audioCtx = null;
+    let stream = null;
+    let fileHandle = null;
+    let writableStream = null;
+    let isRecording = false;
+    let escapePressTime = 0;
+
+    function playBeep() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      const osc = audioCtx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+      osc.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.15);
+    }
+
+    function formatBytes(bytes) {
+      if (bytes === 0) {
+        return '0 B';
+      }
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    function formatTime(ms) {
+      const totalSeconds = Math.floor(ms / 1000);
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const seconds = totalSeconds % 60;
+      return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
+
+    async function initRecording() {
+      try {
+        const resVal = resSelect.value;
+        const fpsVal = parseInt(fpsSelect.value, 10);
+        const width = resVal === '1080' ? 1920 : 1280;
+        const height = resVal === '1080' ? 1080 : 720;
+        limitType = limitSelect.value;
+        if (window.showSaveFilePicker) {
+          fileHandle = await window.showSaveFilePicker({
+            suggestedName: `recording_${resVal}p_${fpsVal}fps.webm`,
+            types: [{
+              description: 'WebM Video',
+              accept: { 'video/webm': ['.webm'] },
+            }],
+          });
+          writableStream = await fileHandle.createWritable();
+        } else {
+          throw new Error('Disk streaming not supported in this browser.');
+        }
+        stream = await navigator.mediaDevices.getDisplayMedia({
+          video: {
+            width: { ideal: width, max: width },
+            height: { ideal: height, max: height },
+            frameRate: { ideal: fpsVal, max: fpsVal },
+            displaySurface: 'window',
+            cursor: 'never'
+          },
+          audio: {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false
+          }
+        });
+        videoPreview.srcObject = stream;
+        startBtn.disabled = true;
+        resSelect.disabled = true;
+        fpsSelect.disabled = true;
+        limitSelect.disabled = true;
+        let countdown = 10;
+        statusBar.innerText = `Starting in ${countdown}... (Click 'Hide' on the sharing bar!)`;
+        const interval = setInterval(() => {
+          countdown--;
+          statusBar.innerText = `Starting in ${countdown}... (Click 'Hide' on the sharing bar!)`;
+          if (countdown === 2 || countdown === 1) {
+            playBeep();
+          }
+          if (countdown <= 0) {
+            clearInterval(interval);
+            startCapture(resVal);
+          }
+        }, 1000);
+        stream.getVideoTracks()[0].onended = stopRecording;
+      } catch (err) {
+        statusBar.innerText = 'Error: ' + err.message;
+        startBtn.disabled = false;
+        resSelect.disabled = false;
+        fpsSelect.disabled = false;
+        limitSelect.disabled = false;
+      }
+    }
+
+    function startCapture(resVal) {
+      recordedSize = 0;
+      startTime = Date.now();
+      isRecording = true;
+      const videoBitrate = resVal === '1080' ? 3000000 : 1500000;
+      const options = {
+        mimeType: 'video/webm; codecs=vp8,opus',
+        videoBitsPerSecond: videoBitrate
+      };
+      mediaRecorder = new MediaRecorder(stream, options);
+      mediaRecorder.ondataavailable = handleDataAvailable;
+      mediaRecorder.onstop = handleStop;
+      mediaRecorder.start(250);
+      stopBtn.disabled = false;
+      statusBar.innerText = `Recording active (Press ESC twice to stop)`;
+    }
+
+    async function handleDataAvailable(event) {
+      if (event.data.size > 0) {
+        recordedSize += event.data.size;
+        if (writableStream) {
+          await writableStream.write(event.data);
+        }
+        const elapsed = Date.now() - startTime;
+        if (limitType === 'size-9.5') {
+          statusBar.innerText = `REC | ${formatBytes(recordedSize)} / 9.5 MB`;
+          if (recordedSize >= maxSize) {
+            stopRecording();
+          }
+        } else if (limitType.startsWith('time-')) {
+          const hoursLimit = parseInt(limitType.split('-')[1], 10);
+          const limitMs = hoursLimit * 60 * 60 * 1000;
+          statusBar.innerText = `REC | ${formatTime(elapsed)} / ${hoursLimit}h | ${formatBytes(recordedSize)}`;
+          if (elapsed >= limitMs) {
+            stopRecording();
+          }
+        } else {
+          statusBar.innerText = `REC | ${formatTime(elapsed)} | ${formatBytes(recordedSize)}`;
+        }
+      }
+    }
+
+    async function handleStop() {
+      isRecording = false;
+      if (writableStream) {
+        await writableStream.close();
+        writableStream = null;
+      }
+      videoPreview.srcObject = null;
+      startBtn.disabled = false;
+      resSelect.disabled = false;
+      fpsSelect.disabled = false;
+      limitSelect.disabled = false;
+      stopBtn.disabled = true;
+      statusBar.innerText = `Saved. Size: ${formatBytes(recordedSize)} | Time: ${formatTime(Date.now() - startTime)}`;
+    }
+
+    function stopRecording() {
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+        const tracks = stream?.getTracks() || [];
+        tracks.forEach(track => track.stop());
+      }
+    }
+
+    function handleBeforeUnload(e) {
+      if (isRecording) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    }
+
+    function handleGlobalKeydown(e) {
+      if (e.key === 'Escape' && isRecording) {
+        const now = Date.now();
+        if (now - escapePressTime < 500) {
+          stopRecording();
+        }
+        escapePressTime = now;
+      }
+    }
+
+    startBtn.addEventListener('click', initRecording);
+    stopBtn.addEventListener('click', stopRecording);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('keydown', handleGlobalKeydown);
+  </script>
+</body>
+</html>

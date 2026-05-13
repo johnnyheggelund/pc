@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Emojis</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text x=%2250%22 y=%2275%22 font-size=%2280%22 text-anchor=%22middle%22>%F0%9F%98%8A</text></svg>">
+<style>
+:root {
+--emoji-font: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+--bg-color: #121212;
+--container-bg: #1e1e1e;
+--input-bg: #2a2a2a;
+--text-color: #e0e0e0;
+--accent-color: #007bff;
+}
+body {
+font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+background-color: var(--bg-color);
+color: var(--text-color);
+padding: 20px;
+margin: 0;
+overflow-x: hidden;
+}
+.container {
+max-width: 1400px;
+margin: 0 auto;
+background-color: var(--container-bg);
+padding: 25px;
+border-radius: 12px;
+box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+.header-info {
+text-align: center;
+margin-bottom: 25px;
+}
+.header-info p {
+margin: 5px 0;
+color: #aaa;
+font-size: 0.9rem;
+line-height: 1.5;
+}
+.controls {
+display: flex;
+gap: 15px;
+margin-bottom: 30px;
+position: sticky;
+top: 0;
+z-index: 100;
+background-color: var(--container-bg);
+padding: 10px 0;
+}
+#search {
+flex-grow: 1;
+padding: 12px 15px;
+border: 1px solid #444;
+background-color: var(--input-bg);
+color: var(--text-color);
+border-radius: 8px;
+font-size: 16px;
+transition: border-color 0.2s;
+}
+select {
+padding: 12px;
+border: 1px solid #444;
+background-color: var(--input-bg);
+color: var(--text-color);
+border-radius: 8px;
+font-size: 16px;
+cursor: pointer;
+}
+#search:focus, select:focus {
+outline: none;
+border-color: var(--accent-color);
+}
+.category-section {
+margin-bottom: 40px;
+}
+.category-title {
+font-size: 1.2rem;
+font-weight: 600;
+color: var(--accent-color);
+margin-bottom: 15px;
+padding-bottom: 8px;
+border-bottom: 1px solid #333;
+text-transform: capitalize;
+position: sticky;
+top: 65px;
+background-color: var(--container-bg);
+z-index: 90;
+}
+.emoji-grid {
+display: grid;
+grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+gap: 12px;
+}
+.emoji {
+font-size: 36px;
+cursor: pointer;
+text-align: center;
+padding: 8px;
+border-radius: 8px;
+transition: background-color 0.15s, transform 0.15s;
+user-select: none;
+font-family: var(--emoji-font);
+display: flex;
+align-items: center;
+justify-content: center;
+}
+.emoji:hover {
+background-color: rgba(255, 255, 255, 0.1);
+transform: scale(1.15);
+}
+.toast {
+position: fixed;
+bottom: 30px;
+left: 50%;
+transform: translateX(-50%) translateY(20px);
+background-color: #333;
+color: white;
+padding: 12px 24px;
+border-radius: 30px;
+font-size: 14px;
+opacity: 0;
+pointer-events: none;
+z-index: 1000;
+box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+border: 1px solid #444;
+transition: opacity 0.3s, transform 0.3s;
+}
+.toast.visible {
+opacity: 1;
+transform: translateX(-50%) translateY(0);
+}
+#jh-copyright-container {
+position: fixed;
+top: 4px;
+right: 2px;
+z-index: 9999;
+background: #222;
+padding: 8px;
+border-radius: 8px;
+font-family: sans-serif;
+font-size: 12px;
+box-shadow: 2px 2px 5px #000;
+border: 1px solid #333;
+white-space: nowrap;
+}
+#jh-copyright-container a {
+color: #64b5f6;
+text-decoration: none;
+}
+@media (max-width: 600px) {
+.controls { flex-direction: column; }
+.category-title { top: 120px; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="header-info">
+<p>Left-click: Copy emoji 📋 | Right-click: Download PNG sprite 💾 | Alt+X: Copy Favicon HTML 📄</p>
+</div>
+<div class="controls">
+<input type="text" id="search" placeholder="Search emojis by name or keywords...">
+<select id="size-select" title="Select sprite size">
+<option value="16">16 px</option>
+<option value="32">32 px</option>
+<option value="64" selected>64 px</option>
+<option value="128">128 px</option>
+<option value="256">256 px</option>
+<option value="512">512 px</option>
+<option value="1024">1024 px</option>
+</select>
+</div>
+<div id="categories-container"></div>
+</div>
+<div class="toast" id="toast">Copied!</div>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+const categoriesContainer = document.getElementById('categories-container');
+const searchInput = document.getElementById('search');
+const sizeSelect = document.getElementById('size-select');
+const toast = document.getElementById('toast');
+const SYSTEM_FONT_STACK = '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
+let toastTimeout;
+let hoveredEmojiData = null;
+let emojiData = null;
+function copyTextToClipboard(text) {
+if (navigator.clipboard && window.isSecureContext) {
+return navigator.clipboard.writeText(text);
+}
+const textArea = document.createElement("textarea");
+textArea.value = text;
+textArea.style.position = "fixed";
+textArea.style.opacity = "0";
+document.body.appendChild(textArea);
+textArea.focus();
+textArea.select();
+try {
+const successful = document.execCommand('copy');
+document.body.removeChild(textArea);
+return successful ? Promise.resolve() : Promise.reject();
+} catch (err) {
+document.body.removeChild(textArea);
+return Promise.reject(err);
+}
+}
+function showToast(message) {
+toast.textContent = message;
+toast.classList.add('visible');
+if (toastTimeout) clearTimeout(toastTimeout);
+toastTimeout = setTimeout(() => {
+toast.classList.remove('visible');
+}, 2000);
+}
+function drawEmojiToCanvas(emojiChar, size) {
+const canvas = document.createElement('canvas');
+const ctx = canvas.getContext('2d');
+canvas.width = size;
+canvas.height = size;
+ctx.clearRect(0, 0, size, size);
+const fontSize = Math.floor(size * 0.85);
+ctx.font = `${fontSize}px ${SYSTEM_FONT_STACK}`;
+ctx.textAlign = 'center';
+ctx.textBaseline = 'middle';
+ctx.fillText(emojiChar, size / 2, size / 2 + (size * 0.05));
+return canvas;
+}
+function downloadSprite(emojiChar, filename) {
+const targetSize = parseInt(sizeSelect.value);
+const canvas = drawEmojiToCanvas(emojiChar, targetSize);
+const dataUrl = canvas.toDataURL('image/png');
+const link = document.createElement('a');
+link.download = `${filename}_${targetSize}x${targetSize}.png`;
+link.href = dataUrl;
+document.body.appendChild(link);
+link.click();
+document.body.removeChild(link);
+showToast(`Saved ${targetSize}x${targetSize} PNG! 💾`);
+}
+function copyFaviconHtmlSnippet(emojiChar) {
+const encodedEmoji = encodeURIComponent(emojiChar);
+const snippet = `<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text x=%2250%22 y=%2275%22 font-size=%2280%22 text-anchor=%22middle%22>${encodedEmoji}</text></svg>">`;
+copyTextToClipboard(snippet)
+.then(() => showToast(`Favicon snippet copied! ${emojiChar}`))
+.catch(() => showToast('Failed to copy.'));
+}
+function renderEmojis(filter = '') {
+categoriesContainer.innerHTML = '';
+if (!emojiData) return;
+const query = filter.toLowerCase();
+emojiData.categories.forEach(cat => {
+const filteredIds = cat.emojis.filter(id => {
+const e = emojiData.emojis[id];
+if (!e) return false;
+return id.includes(query) || (e.keywords && e.keywords.some(kw => kw.includes(query)));
+});
+if (filteredIds.length === 0) return;
+const section = document.createElement('section');
+section.className = 'category-section';
+const title = document.createElement('div');
+title.className = 'category-title';
+title.textContent = cat.id.replace('_', ' ');
+section.appendChild(title);
+const grid = document.createElement('div');
+grid.className = 'emoji-grid';
+filteredIds.forEach(id => {
+const e = emojiData.emojis[id];
+const span = document.createElement('span');
+span.className = 'emoji';
+span.textContent = e.skins[0].native;
+span.addEventListener('mouseenter', () => {
+hoveredEmojiData = { native: e.skins[0].native, id: e.id };
+const size = sizeSelect.value;
+span.title = `Left-click: Copy\nRight-click: Download ${size}px PNG\nAlt+X: Favicon HTML`;
+});
+span.addEventListener('mouseleave', () => hoveredEmojiData = null);
+span.addEventListener('click', () => {
+copyTextToClipboard(e.skins[0].native)
+.then(() => showToast('Emoji copied!'))
+.catch(() => showToast('Failed to copy.'));
+});
+span.addEventListener('contextmenu', (evt) => {
+evt.preventDefault();
+downloadSprite(e.skins[0].native, e.id);
+});
+grid.appendChild(span);
+});
+section.appendChild(grid);
+categoriesContainer.appendChild(section);
+});
+}
+fetch('https://cdn.jsdelivr.net/npm/@emoji-mart/data')
+.then(res => res.json())
+.then(data => {
+emojiData = data;
+renderEmojis();
+})
+.catch(() => {
+categoriesContainer.innerHTML = '<p style="color: #ff8a80; text-align: center;">Could not load emojis.</p>';
+});
+searchInput.addEventListener('input', (e) => renderEmojis(e.target.value));
+document.addEventListener('keydown', (e) => {
+if (e.altKey && e.key.toLowerCase() === 'x') {
+e.preventDefault();
+if (hoveredEmojiData) {
+copyFaviconHtmlSnippet(hoveredEmojiData.native);
+} else {
+showToast('Hover over an emoji first!');
+}
+}
+});
+});
+</script>
+</body>
+</html>

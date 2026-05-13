@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Edit</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text x=%2250%22 y=%2275%22 font-size=%2280%22 text-anchor=%22middle%22>%F0%9F%93%99</text></svg>">
+<style>
+html, body {
+margin: 0;
+padding: 0;
+background-color: #0d1117;
+height: 100vh;
+width: 100vw;
+overflow: hidden;
+}
+textarea {
+width: calc(100vw - 10px);
+height: 100vh;
+margin: 0;
+padding: 10px 0 60px 8px;
+box-sizing: border-box;
+background-color: #0d1117;
+color: #7eb0ff;
+border: none;
+border-left: 40px solid #161b22;
+outline: none;
+resize: none;
+font-family: monospace;
+font-size: 16px;
+white-space: pre;
+overflow-wrap: normal;
+overflow-x: auto;
+overflow-y: auto;
+caret-color: #ff9900;
+}
+#toast {
+position: fixed;
+bottom: 20px;
+right: 20px;
+background: #161b22;
+color: #7eb0ff;
+padding: 8px 16px;
+border-radius: 4px;
+border: 1px solid #30363d;
+font-family: sans-serif;
+font-size: 14px;
+opacity: 0;
+transition: opacity 0.3s ease;
+pointer-events: none;
+z-index: 1000;
+}
+#unsaved-dot {
+position: fixed;
+bottom: 35px;
+left: 20px;
+transform: translateX(-50%);
+width: 12px;
+height: 12px;
+background-color: #ff9900;
+border-radius: 50%;
+opacity: 0;
+transition: opacity 0.3s ease;
+pointer-events: none;
+z-index: 1000;
+}
+#line-counter {
+position: fixed;
+bottom: 10px;
+left: 0;
+width: 40px;
+text-align: center;
+color: #444c56;
+font-family: monospace;
+font-size: 11px;
+pointer-events: none;
+z-index: 1001;
+}
+</style>
+</head>
+<body>
+<textarea id="editor" spellcheck="false" autofocus></textarea>
+<div id="toast"></div>
+<div id="unsaved-dot"></div>
+<div id="line-counter">1</div>
+<script>
+const editor = document.getElementById('editor');
+const toast = document.getElementById('toast');
+const unsavedDot = document.getElementById('unsaved-dot');
+const lineCounter = document.getElementById('line-counter');
+let fileHandle = null;
+let isUnsaved = false;
+let scrollAccumulatorX = 0;
+const MAX_HISTORY = 100;
+let history = [];
+let historyIndex = -1;
+let toastTimeout;
+let inputTimeout;
+function saveState() {
+const val = editor.value;
+const start = editor.selectionStart;
+const end = editor.selectionEnd;
+if (historyIndex >= 0 && history[historyIndex].value === val) return;
+if (historyIndex < history.length - 1) {
+history = history.slice(0, historyIndex + 1);
+}
+history.push({ value: val, start, end });
+if (history.length > MAX_HISTORY) {
+history.shift();
+} else {
+historyIndex++;
+}
+}
+function restoreState(index) {
+if (index < 0 || index >= history.length) return;
+const state = history[index];
+editor.value = state.value;
+editor.selectionStart = state.start;
+editor.selectionEnd = state.end;
+setUnsavedState(true);
+updateLineNumber();
+}
+function undo() {
+clearTimeout(inputTimeout);
+if (historyIndex >= 0 && editor.value !== history[historyIndex].value) {
+saveState();
+}
+if (historyIndex > 0) {
+historyIndex--;
+restoreState(historyIndex);
+}
+}
+function redo() {
+if (historyIndex < history.length - 1) {
+historyIndex++;
+restoreState(historyIndex);
+}
+}
+function showToast(message) {
+clearTimeout(toastTimeout);
+toast.textContent = message;
+toast.style.opacity = '1';
+toastTimeout = setTimeout(() => { toast.style.opacity = '0'; }, 3000);
+}
+function setUnsavedState(state) {
+isUnsaved = state;
+unsavedDot.style.opacity = isUnsaved ? '1' : '0';
+}
+function updateLineNumber() {
+const textBefore = editor.value.substring(0, editor.selectionStart);
+const lineNum = textBefore.split('\n').length;
+lineCounter.textContent = lineNum;
+}
+function loadTextIntoEditor(text) {
+editor.value = text;
+editor.selectionStart = 0;
+editor.selectionEnd = 0;
+history = [];
+historyIndex = -1;
+setUnsavedState(false);
+saveState();
+updateLineNumber();
+editor.focus();
+editor.scrollTo(0, 0);
+}
+async function handleOpen() {
+if (isUnsaved) {
+if (!confirm("You have unsaved changes. Are you sure you want to open a new file?")) return;
+}
+if (window.showOpenFilePicker) {
+try {
+const [handle] = await window.showOpenFilePicker();
+fileHandle = handle;
+const file = await fileHandle.getFile();
+const text = await file.text();
+loadTextIntoEditor(text);
+showToast("File opened");
+} catch (err) {
+if (err.name !== 'AbortError') showToast("Failed to open file");
+}
+}
+else {
+const input = document.createElement('input');
+input.type = 'file';
+input.onchange = (e) => {
+const file = e.target.files[0];
+if (!file) return;
+fileHandle = { name: file.name };
+const reader = new FileReader();
+reader.onload = (event) => {
+loadTextIntoEditor(event.target.result);
+showToast("File opened");
+};
+reader.onerror = () => showToast("Failed to read file");
+reader.readAsText(file);
+};
+input.click();
+}
+}
+async function handleSave() {
+if (window.showSaveFilePicker) {
+try {
+if (!fileHandle || !fileHandle.createWritable) {
+fileHandle = await window.showSaveFilePicker({
+types: [{
+description: 'Text Files',
+accept: {
+'text/html': ['.html', '.htm'],
+'text/javascript': ['.js', '.mjs'],
+'text/css': ['.css'],
+'application/json': ['.json'],
+'text/plain': ['.txt']
+}
+}]
+});
+}
+const writable = await fileHandle.createWritable();
+await writable.write(editor.value);
+await writable.close();
+setUnsavedState(false);
+showToast("File saved");
+} catch (err) {
+if (err.name !== 'AbortError') showToast("Failed to save file");
+}
+}
+else {
+const defaultName = fileHandle ? fileHandle.name : "document.txt";
+const fileName = prompt("Save file as:", defaultName);
+if (!fileName) return;
+fileHandle = { name: fileName };
+const blob = new Blob([editor.value], { type: "text/plain" });
+const url = URL.createObjectURL(blob);
+const a = document.createElement('a');
+a.href = url;
+a.download = fileName;
+document.body.appendChild(a);
+a.click();
+document.body.removeChild(a);
+URL.revokeObjectURL(url);
+setUnsavedState(false);
+showToast("File downloaded");
+}
+}
+function handlePreview() {
+const previewWindow = window.open('about:blank', '_blank');
+if (previewWindow) {
+previewWindow.document.open();
+previewWindow.document.write(editor.value);
+previewWindow.document.close();
+} else {
+showToast("Preview blocked by popup blocker");
+}
+}
+function handleTab(e) {
+e.preventDefault();
+saveState();
+const start = editor.selectionStart;
+const end = editor.selectionEnd;
+const val = editor.value;
+const isShift = e.shiftKey;
+const lineStart = val.lastIndexOf('\n', start - 1) + 1;
+const lineEnd = end > start && val[end - 1] === '\n' ? end - 1 : end;
+let actualLineEnd = val.indexOf('\n', lineEnd);
+if (actualLineEnd === -1) actualLineEnd = val.length;
+const targetText = val.substring(lineStart, actualLineEnd);
+const lines = targetText.split('\n');
+let startDelta = 0;
+let endDelta = 0;
+const newLines = lines.map((line, i) => {
+let newLine = line;
+let delta = 0;
+if (isShift) {
+if (line.startsWith("  ")) { newLine = line.substring(2); delta = -2; }
+else if (line.startsWith(" ") || line.startsWith("\t")) { newLine = line.substring(1); delta = -1; }
+} else {
+if (!(start === end)) { newLine = "  " + line; delta = 2; }
+}
+if (i === 0) {
+const cursorOffsetInLine = start - lineStart;
+startDelta = delta < 0 ? -Math.min(cursorOffsetInLine, Math.abs(delta)) : delta;
+}
+endDelta += delta;
+return newLine;
+});
+if (start === end && !isShift) {
+editor.value = val.substring(0, start) + "  " + val.substring(end);
+editor.selectionStart = editor.selectionEnd = start + 2;
+} else {
+editor.value = val.substring(0, lineStart) + newLines.join('\n') + val.substring(actualLineEnd);
+editor.selectionStart = Math.max(0, start + startDelta);
+editor.selectionEnd = Math.max(0, end + endDelta);
+}
+setUnsavedState(true);
+saveState();
+updateLineNumber();
+}
+function runCleanup() {
+saveState();
+const originalText = editor.value;
+const lines = originalText.split('\n');
+const getPos = (index) => {
+const textBefore = originalText.substring(0, index);
+const linesBefore = textBefore.split('\n');
+return { line: linesBefore.length - 1, col: linesBefore.pop().length };
+};
+const startPos = getPos(editor.selectionStart);
+const endPos = getPos(editor.selectionEnd);
+let newStartLine = 0, newStartCol = 0;
+let newEndLine = 0, newEndCol = 0;
+const ext = fileHandle ? fileHandle.name.split('.').pop().toLowerCase() : 'html';
+const isHtml = ext === 'html' || ext === 'htm';
+const isJs = ['js', 'mjs', 'json', 'ts'].includes(ext);
+const isCss = ext === 'css';
+let state = {
+inScript: isJs,
+inStyle: isCss,
+inBacktick: false,
+inBlockComm: false,
+inHtmlComm: false
+};
+let lastRealChar = '';
+let lastWord = '';
+let currentWord = '';
+let commentCount = 0;
+let whitespaceCount = 0;
+let emptyLinesCount = 0;
+const newLines = [];
+const isEscaped = (lineStr, idx) => {
+let count = 0;
+let i = idx - 1;
+while (i >= 0 && lineStr[i] === '\\') { count++; i--; }
+return count % 2 !== 0;
+};
+for (let i = 0; i < lines.length; i++) {
+const line = lines[i];
+const lowerLine = line.toLowerCase();
+let builtLine = "";
+if (isHtml && !state.inBacktick && !state.inBlockComm && !state.inHtmlComm) {
+if (lowerLine.includes('<' + 'script')) { state.inScript = true; lastRealChar = '{'; }
+if (lowerLine.includes('<' + 'style')) state.inStyle = true;
+}
+let inString = false;
+let quoteChar = '';
+let inRegex = false;
+for (let j = 0; j < line.length; j++) {
+const char = line[j];
+const nextChar = line[j + 1];
+if (state.inScript && !state.inBacktick && !state.inBlockComm && !state.inHtmlComm && !inString && !inRegex) {
+if (/[a-zA-Z0-9_$]/.test(char)) {
+currentWord += char;
+} else {
+if (currentWord.length > 0) lastWord = currentWord;
+currentWord = '';
+if (char.trim() !== '') lastRealChar = char;
+}
+}
+if (state.inHtmlComm) {
+if (char === '-' && nextChar === '-' && line[j + 2] === '>') {
+state.inHtmlComm = false; commentCount++; j += 2;
+}
+continue;
+}
+if (state.inBlockComm) {
+if (char === '*' && nextChar === '/') {
+state.inBlockComm = false; commentCount++; j++;
+}
+continue;
+}
+if (state.inBacktick) {
+builtLine += char;
+if (char === '`' && !isEscaped(line, j)) state.inBacktick = false;
+continue;
+}
+if (inString) {
+builtLine += char;
+if (char === quoteChar && !isEscaped(line, j)) inString = false;
+continue;
+}
+if (inRegex) {
+builtLine += char;
+if (char === '/' && !isEscaped(line, j)) inRegex = false;
+continue;
+}
+if (!state.inScript && !state.inStyle && char === '<' && nextChar === '!' && line.substr(j, 4) === '<' + '!--') {
+state.inHtmlComm = true; j += 3; continue;
+}
+if ((state.inScript || state.inStyle) && char === '/' && nextChar === '*') {
+state.inBlockComm = true; j++; continue;
+}
+if (state.inScript && char === '/' && nextChar === '/') {
+commentCount++; break;
+}
+if (state.inScript || state.inStyle) {
+if (char === '`' && !isEscaped(line, j)) {
+state.inBacktick = true; builtLine += char; continue;
+}
+if ((char === '"' || char === "'") && !isEscaped(line, j)) {
+inString = true; quoteChar = char; builtLine += char; continue;
+}
+if (state.inScript && char === '/' && !isEscaped(line, j)) {
+if (nextChar !== '/' && nextChar !== '*') {
+const isRegexChar = "/=,:[({!&|?;+-*~^%".includes(lastRealChar);
+const isRegexWord = ['return', 'case', 'throw', 'typeof', 'void', 'delete', 'await'].includes(lastWord);
+if (isRegexChar || isRegexWord) {
+inRegex = true; builtLine += char; continue;
+}
+}
+}
+}
+builtLine += char;
+}
+if (isHtml && !state.inBacktick && !state.inBlockComm && !state.inHtmlComm) {
+if (lowerLine.includes('<' + '/script>')) { state.inScript = false; lastRealChar = ''; }
+if (lowerLine.includes('<' + '/style>')) state.inStyle = false;
+}
+const trimmed = builtLine.trimEnd();
+if (builtLine.length !== trimmed.length) whitespaceCount++;
+const isProtected = state.inBacktick;
+if (trimmed.length > 0 || isProtected) {
+newLines.push(trimmed);
+if (i === startPos.line) { newStartLine = newLines.length - 1; newStartCol = Math.min(startPos.col, trimmed.length); }
+if (i === endPos.line) { newEndLine = newLines.length - 1; newEndCol = Math.min(endPos.col, trimmed.length); }
+} else {
+emptyLinesCount++;
+if (i === startPos.line) { newStartLine = Math.max(0, newLines.length - 1); newStartCol = newLines.length > 0 ? newLines[newLines.length - 1].length : 0; }
+if (i === endPos.line) { newEndLine = Math.max(0, newLines.length - 1); newEndCol = newLines.length > 0 ? newLines[newLines.length - 1].length : 0; }
+}
+}
+const finalContent = newLines.join('\n');
+if (finalContent !== originalText) {
+editor.value = finalContent;
+const getAbsPos = (lineIdx, colIdx) => {
+let abs = 0;
+for (let k = 0; k < lineIdx; k++) abs += newLines[k].length + 1;
+return abs + colIdx;
+};
+editor.selectionStart = getAbsPos(newStartLine, newStartCol);
+editor.selectionEnd = Math.max(editor.selectionStart, getAbsPos(newEndLine, newEndCol));
+setUnsavedState(true);
+saveState();
+updateLineNumber();
+showToast(`Cleaned: ${commentCount} comments, ${whitespaceCount} trailing spaces, ${emptyLinesCount} empty lines.`);
+} else {
+showToast("Nothing to clean.");
+}
+}
+function handleInput() {
+if (!isUnsaved) setUnsavedState(true);
+clearTimeout(inputTimeout);
+inputTimeout = setTimeout(saveState, 500);
+updateLineNumber();
+}
+function handleKeyDown(e) {
+if (e.ctrlKey && e.code === 'KeyZ') { e.preventDefault(); undo(); return; }
+if (e.ctrlKey && e.code === 'KeyY') { e.preventDefault(); redo(); return; }
+if (e.altKey && e.code === 'KeyO') { e.preventDefault(); handleOpen(); return; }
+if (e.altKey && e.code === 'KeyS') { e.preventDefault(); handleSave(); return; }
+if (e.altKey && e.code === 'KeyP') { e.preventDefault(); handlePreview(); return; }
+if (e.altKey && e.code === 'KeyC') { e.preventDefault(); runCleanup(); return; }
+if (e.key === 'Tab') { handleTab(e); return; }
+if (e.key.startsWith('Arrow')) setTimeout(updateLineNumber, 0);
+}
+function handleWheel(e) {
+if (Math.abs(e.deltaX) > 0) {
+scrollAccumulatorX += e.deltaX;
+if (Math.abs(scrollAccumulatorX) < 30) {
+e.preventDefault();
+} else {
+scrollAccumulatorX = 0;
+}
+} else {
+scrollAccumulatorX = 0;
+}
+}
+function handleBeforeUnload(e) {
+if (isUnsaved) {
+e.preventDefault();
+e.returnValue = '';
+}
+}
+window.addEventListener('keydown', handleKeyDown);
+window.addEventListener('beforeunload', handleBeforeUnload);
+editor.addEventListener('input', handleInput);
+editor.addEventListener('click', updateLineNumber);
+editor.addEventListener('wheel', handleWheel, { passive: false });
+saveState();
+</script>
+</body>
+</html>

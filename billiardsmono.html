@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Billiards Mono</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text x=%2250%22 y=%2275%22 font-size=%2280%22 text-anchor=%22middle%22>%F0%9F%8E%B1</text></svg>">
+<style>
+:root {
+--bg-color: #000000;
+--text-color: #00ff00;
+--border-color: #004400;
+--felt-color: #000000;
+--danger-color: #ff0000;
+}
+html, body {
+margin: 0;
+padding: 0;
+width: 100%;
+height: 100svh;
+overflow: hidden;
+background-color: var(--bg-color);
+display: flex;
+justify-content: center;
+align-items: center;
+font-family: 'Courier New', Courier, monospace;
+color: var(--text-color);
+font-weight: bold;
+user-select: none;
+touch-action: none;
+}
+#game-area {
+display: flex;
+flex-direction: row;
+width: 100%;
+height: 100%;
+padding: 10px;
+box-sizing: border-box;
+gap: 15px;
+}
+#sidebar {
+display: flex;
+flex-direction: column;
+width: 140px;
+border-right: 2px solid var(--border-color);
+padding-right: 10px;
+gap: 15px;
+flex-shrink: 0;
+}
+.info-box {
+border: 2px solid var(--border-color);
+padding: 10px;
+text-align: center;
+flex-grow: 1;
+display: flex;
+flex-direction: column;
+}
+.info-box h3 {
+margin: 0 0 10px 0;
+border-bottom: 1px solid var(--border-color);
+padding-bottom: 5px;
+font-size: 14px;
+color: #fff;
+}
+.ball-container {
+display: flex;
+flex-wrap: wrap;
+gap: 5px;
+justify-content: center;
+align-content: flex-start;
+}
+.mini-ball {
+width: 18px;
+height: 18px;
+border-radius: 50%;
+border: 2px solid var(--text-color);
+background-color: var(--text-color);
+box-sizing: border-box;
+}
+.mini-ball.stripe {
+background-color: #000;
+position: relative;
+overflow: hidden;
+}
+.mini-ball.stripe::after {
+content: '';
+position: absolute;
+top: 25%; left: 0; width: 100%; height: 50%;
+background-color: var(--text-color);
+}
+#status-msg {
+color: #ffff00;
+font-size: 11px;
+text-align: center;
+min-height: 40px;
+display: flex;
+align-items: center;
+justify-content: center;
+border: 1px dashed var(--border-color);
+padding: 5px;
+text-transform: uppercase;
+line-height: 1.2;
+}
+.btn {
+background: #000;
+color: var(--text-color);
+border: 2px solid var(--border-color);
+padding: 10px;
+cursor: pointer;
+font-family: inherit;
+font-weight: bold;
+text-transform: uppercase;
+}
+.btn:hover {
+background: #002200;
+border-color: #00ff00;
+}
+#main-content {
+flex-grow: 1;
+display: flex;
+justify-content: center;
+align-items: center;
+position: relative;
+overflow: hidden;
+}
+#canvas-container {
+width: 100%;
+height: 100%;
+display: flex;
+justify-content: center;
+align-items: center;
+padding: 10px;
+box-sizing: border-box;
+}
+canvas {
+background: var(--felt-color);
+border: 15px solid var(--border-color);
+border-radius: 10px;
+box-shadow:
+inset 0 0 0 2px #00ff00,
+0 0 40px #000;
+cursor: crosshair;
+max-width: 100%;
+max-height: 100%;
+}
+#power-container {
+width: 60px;
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+margin-left: 5px;
+}
+#power-track {
+width: 30px;
+height: 80%;
+border: 3px solid var(--text-color);
+position: relative;
+background: #001100;
+cursor: ns-resize;
+}
+#power-fill {
+position: absolute;
+bottom: 0;
+left: 0;
+width: 100%;
+height: 0%;
+background: repeating-linear-gradient(
+0deg,
+var(--text-color),
+var(--text-color) 4px,
+#000 4px,
+#000 8px
+);
+transition: height 0.05s ease-out;
+}
+</style>
+</head>
+<body>
+<div id="game-area">
+<div id="sidebar">
+<button class="btn" onclick="Game.startNewGame()">NEW GAME</button>
+<div id="status-msg">AIM & CLICK TO LOCK</div>
+<div class="info-box">
+<h3 id="p1-title">YOU</h3>
+<div id="p1-balls" class="ball-container"></div>
+</div>
+<div class="info-box">
+<h3 id="p2-title">CPU</h3>
+<div id="p2-balls" class="ball-container"></div>
+</div>
+</div>
+<div id="main-content">
+<div id="canvas-container">
+<canvas id="pool-canvas"></canvas>
+</div>
+</div>
+<div id="power-container">
+<div style="font-size:12px; margin-bottom:10px; letter-spacing: 1px;">POWER</div>
+<div id="power-track">
+<div id="power-fill"></div>
+</div>
+</div>
+</div>
+<script>
+window.addEventListener('load', () => {
+const canvas = document.getElementById('pool-canvas');
+const ctx = canvas.getContext('2d');
+const p1Container = document.getElementById('p1-balls');
+const p2Container = document.getElementById('p2-balls');
+const p1Title = document.getElementById('p1-title');
+const p2Title = document.getElementById('p2-title');
+const statusMsg = document.getElementById('status-msg');
+const powerFill = document.getElementById('power-fill');
+const powerTrack = document.getElementById('power-track');
+const Sound = {
+ctx: null,
+init() {
+if(!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+},
+play(freq, type='sine', len=0.1) {
+if(!this.ctx) return;
+if(this.ctx.state === 'suspended') this.ctx.resume();
+const o = this.ctx.createOscillator();
+const g = this.ctx.createGain();
+o.type = type; o.frequency.value = freq;
+o.connect(g); g.connect(this.ctx.destination);
+o.start();
+g.gain.setValueAtTime(0.1, this.ctx.currentTime);
+g.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + len);
+o.stop(this.ctx.currentTime + len);
+},
+hit() { this.play(150, 'square', 0.1); },
+pocket() { this.play(400, 'sine', 0.2); },
+win() { this.play(600, 'triangle', 0.5); },
+lock() { this.play(800, 'square', 0.05); }
+};
+let balls = [], pockets = [];
+const player = { name: 'YOU', type: null };
+const ai = { name: 'CPU', type: null };
+let currentPlayer = player;
+let gameState = 'AIMING';
+let tableOpen = true;
+class Vector {
+constructor(x=0, y=0) { this.x=x; this.y=y; }
+add(v) { return new Vector(this.x+v.x, this.y+v.y); }
+sub(v) { return new Vector(this.x-v.x, this.y-v.y); }
+mul(s) { return new Vector(this.x*s, this.y*s); }
+mag() { return Math.sqrt(this.x**2 + this.y**2); }
+norm() { const m = this.mag(); return m===0 ? new Vector() : new Vector(this.x/m, this.y/m); }
+dot(v) { return this.x*v.x + this.y*v.y; }
+}
+class Ball {
+constructor(x, y, num) {
+this.pos = new Vector(x, y);
+this.vel = new Vector();
+this.num = num;
+this.radius = 0;
+this.sunk = false;
+if(num===0) this.type='cue';
+else if(num===8) this.type='8ball';
+else if(num<8) this.type='solid';
+else this.type='stripe';
+}
+draw(r) {
+if(this.sunk) return;
+this.radius = r;
+ctx.save();
+ctx.beginPath();
+ctx.arc(this.pos.x, this.pos.y, r, 0, Math.PI*2);
+ctx.clip();
+if(this.type === 'cue') ctx.fillStyle = '#fff';
+else if(this.type === '8ball') ctx.fillStyle = '#f00';
+else if(this.type === 'solid') ctx.fillStyle = '#0f0';
+else ctx.fillStyle = '#000';
+ctx.fill();
+if(this.type === 'stripe') {
+ctx.fillStyle = '#0f0';
+ctx.fillRect(this.pos.x-r, this.pos.y-r/2, r*2, r);
+}
+if(this.type === '8ball') {
+ctx.fillStyle = '#000';
+ctx.textAlign='center';
+ctx.textBaseline='middle';
+ctx.font='bold '+Math.floor(r)+'px Courier';
+ctx.fillText('8', this.pos.x, this.pos.y);
+}
+ctx.restore();
+ctx.beginPath();
+ctx.arc(this.pos.x, this.pos.y, r, 0, Math.PI*2);
+if(this.type === 'cue' && gameState==='BALL_IN_HAND' && currentPlayer===player) {
+ctx.strokeStyle = '#f00'; ctx.lineWidth=3;
+} else if (this.type === 'stripe') {
+ctx.strokeStyle = '#0f0'; ctx.lineWidth=2;
+} else {
+ctx.strokeStyle = 'rgba(0,0,0,0)';
+}
+ctx.stroke();
+}
+}
+const Physics = {
+shotInfo: {},
+update() {
+let moving = false;
+const steps = 8;
+const drag = 0.99;
+balls.forEach(b => {
+if(!b.sunk) {
+b.vel = b.vel.mul(drag);
+if(b.vel.mag() < 0.15) b.vel = new Vector();
+else moving = true;
+}
+});
+for(let s=0; s<steps; s++) {
+balls.forEach(b => {
+if(!b.sunk) b.pos = b.pos.add(b.vel.mul(1/steps));
+});
+for(let i=0; i<balls.length; i++) {
+for(let j=i+1; j<balls.length; j++) {
+let b1=balls[i], b2=balls[j];
+if(b1.sunk || b2.sunk) continue;
+let distVec = b1.pos.sub(b2.pos);
+let dist = distVec.mag();
+if(dist < b1.radius*2) {
+if(!this.shotInfo.firstHit && (b1.type==='cue'||b2.type==='cue')) {
+this.shotInfo.firstHit = b1.type==='cue' ? b2 : b1;
+}
+let n = distVec.norm();
+let overlap = (b1.radius*2 - dist)/2;
+b1.pos = b1.pos.add(n.mul(overlap));
+b2.pos = b2.pos.sub(n.mul(overlap));
+let v1n = b1.vel.dot(n);
+let v2n = b2.vel.dot(n);
+let tangent = new Vector(-n.y, n.x);
+let v1t = b1.vel.dot(tangent);
+let v2t = b2.vel.dot(tangent);
+b1.vel = n.mul(v2n).add(tangent.mul(v1t));
+b2.vel = n.mul(v1n).add(tangent.mul(v2t));
+if(Math.abs(v1n-v2n) > 0.5) Sound.hit();
+}
+}
+}
+balls.forEach(b => {
+if(b.sunk) return;
+pockets.forEach(p => {
+if(b.pos.sub(p).mag() < b.radius * (p.isCorner ? 2.2 : 1.8)) {
+b.sunk = true;
+b.vel = new Vector();
+Sound.pocket();
+this.shotInfo.sunk.push(b);
+}
+});
+if(b.sunk) return;
+const w = canvas.width, h = canvas.height, r = b.radius;
+if(b.pos.x < r) { b.pos.x = r; b.vel.x = Math.abs(b.vel.x) * 0.9; }
+if(b.pos.x > w-r) { b.pos.x = w-r; b.vel.x = -Math.abs(b.vel.x) * 0.9; }
+if(b.pos.y < r) { b.pos.y = r; b.vel.y = Math.abs(b.vel.y) * 0.9; }
+if(b.pos.y > h-r) { b.pos.y = h-r; b.vel.y = -Math.abs(b.vel.y) * 0.9; }
+});
+}
+return moving;
+}
+};
+const Game = {
+lastWidth: 0,
+lastHeight: 0,
+fitCanvas() {
+const container = document.getElementById('canvas-container');
+const maxW = container.clientWidth - 40;
+const maxH = container.clientHeight - 40;
+let w = maxW;
+let h = w / 2;
+if (h > maxH) {
+h = maxH;
+w = h * 2;
+}
+const scaleX = this.lastWidth ? (w / this.lastWidth) : 1;
+const scaleY = this.lastHeight ? (h / this.lastHeight) : 1;
+canvas.width = w;
+canvas.height = h;
+balls.forEach(b => {
+b.pos.x *= scaleX;
+b.pos.y *= scaleY;
+b.vel.x *= scaleX;
+b.vel.y *= scaleY;
+});
+this.createPockets();
+this.lastWidth = w;
+this.lastHeight = h;
+},
+startNewGame() {
+Sound.init();
+this.lastWidth = 0;
+this.lastHeight = 0;
+this.fitCanvas();
+player.type = null; ai.type = null;
+currentPlayer = player;
+gameState = 'AIMING';
+Input.locked = false;
+tableOpen = true;
+this.createBalls();
+this.updateUI("AIM & CLICK TO LOCK");
+},
+createBalls() {
+balls = [];
+const w = canvas.width, h = canvas.height;
+const r = w / 50;
+balls.push(new Ball(w*0.25, h*0.5, 0));
+const startX = w * 0.75;
+const startY = h * 0.5;
+const rows = 5;
+let list = [1,9,2,10,8,3,11,4,12,5,13,6,14,7,15];
+let idx = 0;
+for(let col=0; col<rows; col++) {
+for(let row=0; row<=col; row++) {
+if(idx >= 15) break;
+let num = list[idx++];
+let x = startX + col * (r*1.8);
+let y = startY + (row * (r*2.05)) - (col * r * 1.025);
+balls.push(new Ball(x, y, num));
+}
+}
+},
+createPockets() {
+const w = canvas.width, h = canvas.height;
+pockets = [];
+const addPocket = (x, y, isCorner) => {
+let p = new Vector(x, y);
+p.isCorner = isCorner;
+pockets.push(p);
+};
+addPocket(0, 0, true);
+addPocket(w/2, 0, false);
+addPocket(w, 0, true);
+addPocket(0, h, true);
+addPocket(w/2, h, false);
+addPocket(w, h, true);
+},
+loop() {
+ctx.clearRect(0, 0, canvas.width, canvas.height);
+const r = canvas.width / 50;
+pockets.forEach(p => {
+let size = r * (p.isCorner ? 2.5 : 2.0);
+ctx.beginPath(); ctx.arc(p.x, p.y, size, 0, Math.PI*2);
+ctx.fillStyle = '#000'; ctx.fill();
+});
+if(gameState === 'MOVING') {
+const isMoving = Physics.update();
+if(!isMoving) this.turnEnd();
+}
+balls.forEach(b => b.draw(r));
+if(gameState === 'AIMING' && currentPlayer === player) {
+Input.drawLine();
+}
+requestAnimationFrame(() => this.loop());
+},
+turnEnd() {
+const info = Physics.shotInfo;
+let foul = false;
+let nextTurn = currentPlayer;
+Input.locked = false;
+Input.power = 0;
+powerFill.style.height = '0%';
+if(!info.firstHit) foul = true;
+else if(info.sunk.some(b=>b.type==='cue')) foul = true;
+else if(tableOpen) {
+if(info.firstHit.type==='8ball') foul=true;
+} else {
+if(info.firstHit.type !== currentPlayer.type && info.firstHit.type !== '8ball') foul=true;
+}
+if(info.sunk.some(b=>b.type==='8ball')) {
+const myBallsLeft = balls.some(b => b.type === currentPlayer.type && !b.sunk);
+if(foul || tableOpen || myBallsLeft) {
+gameState = 'GAMEOVER';
+this.updateUI((currentPlayer===player ? "YOU" : "CPU") + " LOST!");
+Sound.win();
+return;
+} else {
+gameState = 'GAMEOVER';
+this.updateUI((currentPlayer===player ? "YOU" : "CPU") + " WON!");
+Sound.win();
+return;
+}
+}
+if(foul) {
+const cue = balls[0];
+if(cue.sunk) {
+cue.sunk = false;
+cue.vel = new Vector();
+cue.pos = new Vector(canvas.width/4, canvas.height/2);
+}
+nextTurn = (currentPlayer === player) ? ai : player;
+gameState = 'BALL_IN_HAND';
+this.updateUI("FOUL. BALL IN HAND FOR " + nextTurn.name);
+if(nextTurn === ai) setTimeout(() => AI.placeAndShoot(), 1000);
+} else {
+const legalPots = info.sunk.filter(b => b.type !== 'cue');
+if(legalPots.length > 0) {
+if(tableOpen) {
+currentPlayer.type = legalPots[0].type;
+const other = (currentPlayer===player) ? ai : player;
+other.type = (currentPlayer.type==='solid') ? 'stripe' : 'solid';
+tableOpen = false;
+}
+if(legalPots.some(b => b.type === currentPlayer.type)) {
+gameState = 'AIMING';
+this.updateUI(currentPlayer.name + " SHOOTS AGAIN");
+if(currentPlayer === ai) setTimeout(() => AI.shoot(), 1000);
+} else {
+nextTurn = (currentPlayer === player) ? ai : player;
+gameState = 'AIMING';
+this.updateUI("TURN: " + nextTurn.name);
+if(nextTurn === ai) setTimeout(() => AI.shoot(), 1000);
+}
+} else {
+nextTurn = (currentPlayer === player) ? ai : player;
+gameState = 'AIMING';
+this.updateUI("TURN: " + nextTurn.name);
+if(nextTurn === ai) setTimeout(() => AI.shoot(), 1000);
+}
+}
+currentPlayer = nextTurn;
+this.updateBallsUI();
+},
+updateUI(msg) {
+if(msg) statusMsg.textContent = msg;
+this.updateBallsUI();
+},
+updateBallsUI() {
+p1Title.textContent = "YOU" + (player.type ? ` (${player.type==='solid'?'FULL':'STRIPE'})` : '');
+p2Title.textContent = "CPU" + (ai.type ? ` (${ai.type==='solid'?'FULL':'STRIPE'})` : '');
+p1Container.innerHTML = ''; p2Container.innerHTML = '';
+balls.forEach(b => {
+if(b.sunk && (b.type==='solid'||b.type==='stripe')) {
+const div = document.createElement('div');
+div.className = 'mini-ball ' + b.type;
+if(player.type === b.type) p1Container.appendChild(div);
+else if(ai.type === b.type) p2Container.appendChild(div);
+}
+});
+}
+};
+window.Game = Game;
+const Input = {
+aimDir: new Vector(1, 0),
+power: 0,
+draggingPower: false,
+locked: false,
+init() {
+const toggleLock = (e) => {
+if(gameState === 'AIMING' && currentPlayer === player) {
+this.locked = !this.locked;
+Sound.lock();
+Game.updateUI(this.locked ? "AIM LOCKED. SET POWER." : "AIM UNLOCKED.");
+}
+if(gameState === 'BALL_IN_HAND' && currentPlayer === player) {
+this.placeBall(e);
+}
+};
+canvas.addEventListener('mousedown', toggleLock);
+canvas.addEventListener('touchstart', (e) => {
+e.preventDefault();
+toggleLock(e);
+});
+const updatePower = (e) => {
+const rect = powerTrack.getBoundingClientRect();
+const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+const y = clientY - rect.top;
+this.power = Math.max(0, Math.min(1, 1 - (y / rect.height)));
+powerFill.style.height = (this.power*100)+'%';
+};
+const startPower = (e) => {
+if(gameState==='AIMING' && currentPlayer===player && this.locked) {
+this.draggingPower = true;
+updatePower(e);
+} else if(!this.locked && gameState === 'AIMING') {
+Game.updateUI("CLICK TABLE TO LOCK FIRST!");
+}
+};
+const stopPower = () => {
+if(this.draggingPower) {
+this.draggingPower = false;
+if(this.power > 0.05) this.shoot();
+this.power = 0;
+powerFill.style.height = '0%';
+}
+};
+powerTrack.addEventListener('mousedown', startPower);
+powerTrack.addEventListener('touchstart', startPower, {passive: false});
+const handleMove = (e) => {
+if(this.draggingPower) updatePower(e);
+else this.aim(e);
+};
+window.addEventListener('mousemove', handleMove);
+window.addEventListener('touchmove', handleMove, {passive: false});
+window.addEventListener('mouseup', stopPower);
+window.addEventListener('touchend', stopPower);
+},
+getPos(e) {
+const rect = canvas.getBoundingClientRect();
+const t = e.touches ? e.touches[0] : e;
+return new Vector(t.clientX - rect.left, t.clientY - rect.top);
+},
+aim(e) {
+if(this.locked || this.draggingPower || gameState !== 'AIMING' || currentPlayer !== player) return;
+const m = this.getPos(e);
+if(m.x > -50 && m.x < canvas.width+50) {
+this.aimDir = m.sub(balls[0].pos).norm();
+}
+},
+placeBall(e) {
+if(gameState !== 'BALL_IN_HAND' || currentPlayer !== player) return;
+const p = this.getPos(e);
+const r = balls[0].radius;
+let ok = true;
+balls.forEach(b => {
+if(!b.sunk && b !== balls[0] && b.pos.sub(p).mag() < r*2) ok = false;
+});
+if(ok) {
+balls[0].pos = p;
+gameState = 'AIMING';
+this.locked = false;
+Game.updateUI("PLACED. AIM & CLICK TO LOCK.");
+}
+},
+shoot() {
+const force = this.power * (canvas.width / 25);
+balls[0].vel = this.aimDir.mul(force);
+Physics.shotInfo = { firstHit:null, sunk:[], rail:false };
+gameState = 'MOVING';
+Sound.hit();
+},
+drawLine() {
+const cue = balls[0].pos;
+const end = cue.add(this.aimDir.mul(600));
+ctx.beginPath();
+ctx.moveTo(cue.x, cue.y);
+ctx.lineTo(end.x, end.y);
+if(this.locked) {
+ctx.strokeStyle = '#f00';
+ctx.setLineDash([]);
+ctx.lineWidth = 2;
+} else {
+ctx.strokeStyle = '#fff';
+ctx.setLineDash([5, 5]);
+ctx.lineWidth = 1;
+}
+ctx.stroke();
+ctx.setLineDash([]);
+}
+};
+const AI = {
+isPathClear(startPos, endPos, ignore1, ignore2) {
+const lineVec = endPos.sub(startPos);
+const lineLen = lineVec.mag();
+if(lineLen < 1) return true;
+const norm = lineVec.norm();
+for (const ball of balls) {
+if (ball.sunk || ball === ignore1 || ball === ignore2) continue;
+const toBall = ball.pos.sub(startPos);
+const dot = toBall.dot(norm);
+if (dot > 0 && dot < lineLen) {
+const closest = startPos.add(norm.mul(dot));
+const dist = closest.sub(ball.pos).mag();
+if (dist < ball.radius * 2) return false;
+}
+}
+return true;
+},
+shoot() {
+if(gameState !== 'AIMING') return;
+const cue = balls[0];
+let bestShot = { score: -Infinity, aimPos: null, power: 0 };
+let targets = balls.filter(b => !b.sunk && b !== cue);
+if(!tableOpen && ai.type) targets = targets.filter(b => b.type === ai.type);
+const eight = balls.find(b => b.type === '8ball');
+const allMySunk = (ai.type && !balls.some(b => b.type === ai.type && !b.sunk));
+if(targets.length === 0 || allMySunk) {
+if(!eight.sunk) targets = [eight];
+} else if (!allMySunk) {
+targets = targets.filter(b => b.type !== '8ball');
+}
+targets.forEach(target => {
+pockets.forEach(pocket => {
+const targetToPocket = pocket.sub(target.pos);
+const distTargetPocket = targetToPocket.mag();
+const dirTargetPocket = targetToPocket.norm();
+const aimPos = target.pos.sub(dirTargetPocket.mul(cue.radius + target.radius));
+const cueToAim = aimPos.sub(cue.pos);
+const distCueAim = cueToAim.mag();
+const dirCueAim = cueToAim.norm();
+const cutAngle = dirCueAim.dot(dirTargetPocket);
+if(cutAngle > 0.3 &&
+this.isPathClear(cue.pos, aimPos, cue, target) &&
+this.isPathClear(target.pos, pocket, target, cue)) {
+let score = 1000 * cutAngle;
+score -= distTargetPocket * 1.5;
+score -= distCueAim;
+const totalDist = distCueAim + distTargetPocket;
+const power = Math.min(canvas.width/40, 15 + totalDist * 0.02);
+if(score > bestShot.score) {
+bestShot = { score, aimPos, power };
+}
+}
+});
+});
+if(bestShot.score === -Infinity) {
+if(targets.length > 0) {
+let closest = null, minD = Infinity;
+targets.forEach(t => {
+if(this.isPathClear(cue.pos, t.pos, cue, t)) {
+let d = t.pos.sub(cue.pos).mag();
+if(d < minD) { minD = d; closest = t; }
+}
+});
+bestShot = closest ? { aimPos: closest.pos, power: canvas.width/60 } :
+{ aimPos: cue.pos.add(new Vector(1,1)), power: canvas.width/50 };
+} else {
+bestShot = { aimPos: cue.pos.add(new Vector(1,0)), power: canvas.width/80 };
+}
+}
+if(bestShot.aimPos) {
+let dir = bestShot.aimPos.sub(cue.pos).norm();
+balls[0].vel = dir.mul(bestShot.power);
+Physics.shotInfo = { firstHit:null, sunk:[], rail:false };
+gameState = 'MOVING';
+Sound.hit();
+}
+},
+placeAndShoot() {
+balls[0].pos = new Vector(canvas.width*0.25, canvas.height/2);
+for(let i=0; i<20; i++) {
+let ok = true;
+balls.forEach(b=>{ if(!b.sunk && b!==balls[0] && b.pos.sub(balls[0].pos).mag() < balls[0].radius*2.1) ok=false; });
+if(!ok) balls[0].pos = new Vector(Math.random()*(canvas.width-40)+20, Math.random()*(canvas.height-40)+20);
+else break;
+}
+balls[0].vel = new Vector();
+gameState = 'AIMING';
+setTimeout(() => this.shoot(), 500);
+}
+};
+Sound.init();
+Input.init();
+requestAnimationFrame(() => {
+setTimeout(() => {
+Game.startNewGame();
+Game.loop();
+}, 200);
+});
+window.addEventListener('resize', () => {
+Game.fitCanvas();
+});
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8-Ball Pool</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text x=%2250%22 y=%2275%22 font-size=%2280%22 text-anchor=%22middle%22>%F0%9F%8E%B1</text></svg>">
+<style>
+:root {
+--bg-color: #1a1614;
+--panel-bg: #2d2622;
+--border-color: #4a3b32;
+--hover-color: #5c4a3d;
+--text-color: #e6d5c3;
+--accent-color: #cc4228;
+--board-bg: #2d5a27;
+--shadow: 0 4px 12px rgba(0,0,0,0.5);
+--radius: 8px;
+}
+body {
+background-color: var(--bg-color);
+color: var(--text-color);
+font-family: 'Courier New', Courier, monospace;
+display: flex;
+align-items: center;
+justify-content: center;
+margin: 0;
+height: 100vh;
+height: 100dvh;
+overflow: hidden;
+font-weight: bold;
+touch-action: none;
+-webkit-user-select: none;
+user-select: none;
+-webkit-touch-callout: none;
+}
+#game-area {
+display: flex;
+flex-direction: column;
+gap: 8px;
+padding: 8px;
+width: 100%;
+height: 100vh;
+height: 100dvh;
+max-width: 1600px;
+box-sizing: border-box;
+}
+#top-bar {
+display: flex;
+justify-content: space-between;
+align-items: center;
+background-color: var(--panel-bg);
+border: 1px solid var(--border-color);
+border-radius: var(--radius);
+box-shadow: var(--shadow);
+padding: 5px 10px;
+width: 100%;
+box-sizing: border-box;
+flex-shrink: 0;
+flex-wrap: wrap;
+gap: 10px;
+}
+#center-info {
+display: flex;
+flex-direction: column;
+align-items: center;
+gap: 5px;
+flex: 1;
+min-width: 300px;
+}
+#status {
+font-size: 16px;
+color: var(--accent-color);
+text-transform: uppercase;
+text-align: center;
+}
+#controls {
+display: flex;
+gap: 10px;
+margin-top: 5px;
+}
+.score-box {
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+padding: 4px 10px;
+background-color: var(--bg-color);
+border: 2px solid var(--border-color);
+border-radius: var(--radius);
+font-size: 13px;
+text-transform: uppercase;
+transition: all 0.2s;
+min-width: 120px;
+}
+.score-box.current-turn {
+border-color: var(--accent-color);
+color: var(--accent-color);
+box-shadow: inset 0 0 10px rgba(204, 66, 40, 0.2);
+}
+.score-details {
+display: flex;
+align-items: baseline;
+gap: 8px;
+margin-top: 2px;
+}
+.score-count {
+font-size: 24px;
+font-weight: bold;
+}
+.ball-type {
+font-size: 11px;
+color: #8c7a6b;
+}
+.score-box.current-turn .ball-type {
+color: var(--text-color);
+}
+button, select {
+background-color: var(--bg-color);
+color: var(--text-color);
+border: 2px solid var(--border-color);
+padding: 4px 8px;
+font-size: 12px;
+font-weight: bold;
+cursor: pointer;
+border-radius: var(--radius);
+font-family: 'Courier New', Courier, monospace;
+text-transform: uppercase;
+transition: all 0.2s;
+}
+button:hover, select:hover {
+border-color: var(--accent-color);
+color: var(--accent-color);
+box-shadow: 0 0 8px rgba(204, 66, 40, 0.4);
+}
+select:focus { outline: none; }
+select:disabled { opacity: 0.5; cursor: not-allowed; }
+#board-container {
+flex: 1;
+width: 100%;
+box-sizing: border-box;
+display: flex;
+justify-content: center;
+align-items: center;
+background-color: var(--panel-bg);
+border: 2px solid var(--border-color);
+border-radius: var(--radius);
+box-shadow: var(--shadow);
+padding: 8px;
+overflow: hidden;
+}
+canvas {
+background-color: var(--board-bg);
+border: 8px solid var(--border-color);
+border-radius: 12px;
+box-shadow: inset 0 0 30px rgba(0,0,0,0.6), 0 10px 20px rgba(0,0,0,0.6);
+cursor: crosshair;
+touch-action: none;
+user-select: none;
+-webkit-user-select: none;
+}
+@media (max-width: 800px) {
+#top-bar { flex-direction: column; justify-content: center; }
+.score-box { width: 100%; }
+#board-container { padding: 5px; }
+canvas { border-width: 6px; }
+}
+</style>
+</head>
+<body>
+<div id="game-area">
+<div id="top-bar">
+<div id="p1-score" class="score-box current-turn">
+<div>Player 1</div>
+<div class="score-details">
+<span class="score-count" id="p1-count">7</span>
+<span class="ball-type" id="p1-type">OPEN</span>
+</div>
+</div>
+<div id="center-info">
+<div id="status">SETTING UP TABLE...</div>
+<div id="controls">
+<select id="game-mode-select">
+<option value="pva" selected>VS CPU</option>
+<option value="pvp">VS PLAYER</option>
+</select>
+<select id="difficulty-select">
+<option value="1">LEVEL 1 - EASY</option>
+<option value="2">LEVEL 2 - MEDIUM</option>
+<option value="3" selected>LEVEL 3 - HARD</option>
+<option value="4">LEVEL 4 - EXPERT</option>
+<option value="5">LEVEL 5 - IMPOSSIBLE</option>
+</select>
+<button id="reset-btn" onclick="Game.startNewGame()">NEW GAME</button>
+</div>
+</div>
+<div id="p2-score" class="score-box">
+<div id="p2-name-label">Player 2</div>
+<div class="score-details">
+<span class="score-count" id="p2-count">7</span>
+<span class="ball-type" id="p2-type">OPEN</span>
+</div>
+</div>
+</div>
+<div id="board-container">
+<canvas id="pool-canvas"></canvas>
+</div>
+</div>
+<script>
+const canvas = document.getElementById('pool-canvas');
+const ctx = canvas.getContext('2d');
+const statusDisplay = document.getElementById('status');
+const p1CountEl = document.getElementById('p1-count');
+const p2CountEl = document.getElementById('p2-count');
+const p1TypeEl = document.getElementById('p1-type');
+const p2TypeEl = document.getElementById('p2-type');
+const p1ScoreBox = document.getElementById('p1-score');
+const p2ScoreBox = document.getElementById('p2-score');
+const p2NameLabel = document.getElementById('p2-name-label');
+const gameModeSelect = document.getElementById('game-mode-select');
+const difficultySelect = document.getElementById('difficulty-select');
+gameModeSelect.addEventListener('change', (e) => {
+difficultySelect.disabled = (e.target.value === 'pvp');
+Game.startNewGame();
+});
+difficultySelect.addEventListener('change', () => Game.startNewGame());
+const Sound = {
+audioCtx: null, masterVolume: null,
+init() {
+const createContextOnce = () => {
+if (this.audioCtx) return;
+try {
+this.audioCtx = new(window.AudioContext || window.webkitAudioContext)();
+this.masterVolume = this.audioCtx.createGain();
+this.masterVolume.gain.setValueAtTime(0.5, this.audioCtx.currentTime);
+this.masterVolume.connect(this.audioCtx.destination);
+} catch (e) { console.error("Web Audio API not supported"); }
+};
+document.addEventListener('mousedown', createContextOnce, { once: true });
+document.addEventListener('touchstart', createContextOnce, { once: true });
+},
+_playTone(freq, type, vol, duration, attack = 0.01, decay = 0.1, freqSweep = 0) {
+if (!this.audioCtx) return;
+const t = this.audioCtx.currentTime;
+const osc = this.audioCtx.createOscillator();
+const gain = this.audioCtx.createGain();
+osc.type = type;
+osc.frequency.setValueAtTime(freq, t);
+if (freqSweep !== 0) osc.frequency.exponentialRampToValueAtTime(freq + freqSweep, t + duration);
+gain.gain.setValueAtTime(0, t);
+gain.gain.linearRampToValueAtTime(vol, t + attack);
+gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+osc.connect(gain); gain.connect(this.masterVolume);
+osc.start(t); osc.stop(t + duration);
+},
+playShot(volume) { this._playTone(2500, 'sine', Math.min(1, Math.max(0, volume)) * 0.8, 0.03, 0.001, 0.02, -1500); },
+playBallCollision(volume) { const vol = Math.min(1, Math.max(0, volume)) * 0.6; if (vol >= 0.05) this._playTone(2500, 'sine', vol, 0.03, 0.001, 0.02, -1500); },
+playRailHit(volume) { const vol = Math.min(1, Math.max(0, volume)) * 0.5; if (vol >= 0.05) this._playTone(440, 'sine', vol, 0.15, 0.01, 0.1, -100); },
+playPocket() { this._playTone(220, 'sine', 0.7, 0.3, 0.01, 0.2, -50); },
+playWin() {
+this._playTone(523.25, 'sine', 0.4, 0.15, 0.01, 0.1);
+setTimeout(() => this._playTone(659.25, 'sine', 0.4, 0.15, 0.01, 0.1), 150);
+setTimeout(() => this._playTone(783.99, 'sine', 0.4, 0.15, 0.01, 0.1), 300);
+setTimeout(() => this._playTone(1046.50, 'sine', 0.5, 0.3, 0.01, 0.2), 450);
+},
+playLose() {
+this._playTone(440, 'sawtooth', 0.3, 0.2, 0.01, 0.15, -100);
+setTimeout(() => this._playTone(330, 'sawtooth', 0.3, 0.3, 0.01, 0.25, -100), 200);
+}
+};
+let balls = [], pockets = [];
+const p1 = { name: 'PLAYER 1', ballType: null, isAi: false };
+const p2 = { name: 'CPU', ballType: null, isAi: true };
+let gameState = 'LOADING';
+class Vector {
+constructor(x = 0, y = 0) { this.x = x; this.y = y; }
+add(v) { return new Vector(this.x + v.x, this.y + v.y); }
+subtract(v) { return new Vector(this.x - v.x, this.y - v.y); }
+multiply(s) { return new Vector(this.x * s, this.y * s); }
+magnitude() { return Math.sqrt(this.x ** 2 + this.y ** 2); }
+normalize() {
+const m = this.magnitude();
+return m > 0 ? new Vector(this.x / m, this.y / m) : new Vector();
+}
+dot(v) { return this.x * v.x + this.y * v.y; }
+}
+class Ball {
+constructor(pos, number) {
+this.pos = pos;
+this.vel = new Vector();
+this.number = number;
+this.radius = 0;
+this.isSunk = false;
+this.hitRail = false;
+if (number === 0) this.type = 'cue';
+else if (number === 8) this.type = '8ball';
+else if (number > 0 && number < 8) this.type = 'solid';
+else if (number > 8 && number <= 15) this.type = 'stripe';
+else this.type = 'invalid';
+this.baseColor = this.getColor();
+this.displayColor = this.baseColor;
+}
+getColor() {
+const colors = {
+0: '#ffffff', 1: '#ffca28', 2: '#2962ff', 3: '#d50000', 4: '#6200ea',
+5: '#ff6d00', 6: '#00c853', 7: '#c51162', 8: '#111111', 9: '#ffca28',
+10: '#2962ff', 11: '#d50000', 12: '#6200ea', 13: '#ff6d00',
+14: '#00c853', 15: '#c51162'
+};
+return colors[this.number] || '#ff00ff';
+}
+draw() {
+if (this.isSunk || this.type === 'invalid') return;
+ctx.save();
+ctx.shadowColor = 'rgba(0,0,0,0.5)';
+ctx.shadowBlur = this.radius * 0.4;
+ctx.shadowOffsetX = this.radius * 0.2;
+ctx.shadowOffsetY = this.radius * 0.3;
+ctx.beginPath();
+ctx.arc(this.pos.x, this.pos.y, this.radius, 0, Math.PI * 2);
+ctx.fillStyle = this.displayColor;
+if (this.type === 'cue' && gameState === 'BALL_IN_HAND' && !Game.currentPlayer.isAi) {
+ctx.globalAlpha = 0.7;
+}
+ctx.fill();
+ctx.globalAlpha = 1;
+if (this.type === 'stripe') {
+ctx.fillStyle = '#ffffff';
+ctx.save();
+ctx.clip();
+ctx.fillRect(this.pos.x - this.radius, this.pos.y - this.radius * 0.5, this.radius * 2, this.radius);
+ctx.restore();
+}
+let shade = ctx.createRadialGradient(this.pos.x, this.pos.y, this.radius * 0.1, this.pos.x, this.pos.y, this.radius);
+shade.addColorStop(0, 'rgba(0,0,0,0.0)');
+shade.addColorStop(0.7, 'rgba(0,0,0,0.2)');
+shade.addColorStop(1, 'rgba(0,0,0,0.6)');
+ctx.fillStyle = shade;
+ctx.fill();
+let highlight = ctx.createRadialGradient(this.pos.x - this.radius * 0.3, this.pos.y - this.radius * 0.3, this.radius * 0.05, this.pos.x, this.pos.y, this.radius);
+highlight.addColorStop(0, 'rgba(255,255,255,0.8)');
+highlight.addColorStop(0.4, 'rgba(255,255,255,0)');
+ctx.fillStyle = highlight;
+ctx.fill();
+ctx.restore();
+}
+}
+class Pocket {
+constructor(pos, isCorner) {
+this.pos = pos;
+this.isCorner = isCorner;
+this.radius = 0;
+}
+draw() {
+ctx.beginPath();
+ctx.arc(this.pos.x, this.pos.y, this.radius, 0, Math.PI * 2);
+ctx.fillStyle = '#111';
+ctx.fill();
+}
+}
+const Physics = {
+shotData: {},
+update(deltaTime) {
+if (!deltaTime || deltaTime <= 0) return;
+const timeCorrection = deltaTime * 60;
+const iterations = 5;
+for (let iter = 0; iter < iterations; iter++) {
+balls.forEach(b => {
+if (!b.isSunk) b.pos = b.pos.add(b.vel.multiply(timeCorrection / iterations));
+});
+this.handleCollisions();
+}
+balls.forEach(b => {
+const friction = Math.pow(0.985, timeCorrection);
+b.vel = b.vel.multiply(friction);
+if (b.vel.magnitude() < 0.05) b.vel = new Vector();
+});
+},
+handleCollisions() {
+for (let i = 0; i < balls.length; i++) {
+for (let j = i + 1; j < balls.length; j++) {
+const b1 = balls[i], b2 = balls[j];
+if (b1.isSunk || b2.isSunk) continue;
+const distVec = b1.pos.subtract(b2.pos);
+const dist = distVec.magnitude();
+if (dist < b1.radius + b2.radius) {
+if ((b1.type === 'cue' || b2.type === 'cue') && !this.shotData.firstHit) {
+this.shotData.firstHit = (b1.type === 'cue') ? b2 : b1;
+}
+const normal = distVec.normalize();
+const overlap = b1.radius + b2.radius - dist;
+b1.pos = b1.pos.add(normal.multiply(overlap / 2));
+b2.pos = b2.pos.subtract(normal.multiply(overlap / 2));
+const tangent = new Vector(-normal.y, normal.x);
+const v1n = b1.vel.dot(normal), v1t = b1.vel.dot(tangent);
+const v2n = b2.vel.dot(normal), v2t = b2.vel.dot(tangent);
+Sound.playBallCollision(Math.abs(v1n - v2n) / 25);
+b1.vel = normal.multiply(v2n).add(tangent.multiply(v1t));
+b2.vel = normal.multiply(v1n).add(tangent.multiply(v2t));
+}
+}
+}
+balls.forEach(b => {
+if (b.isSunk) return;
+pockets.forEach(p => {
+if (b.pos.subtract(p.pos).magnitude() < p.radius) {
+b.isSunk = true;
+b.vel = new Vector();
+this.shotData.sunkBalls.push(b);
+Sound.playPocket();
+}
+});
+if (b.isSunk) return;
+const railRestitution = -0.85;
+if ((b.pos.x < b.radius) || (b.pos.x > canvas.width - b.radius)) {
+Sound.playRailHit(Math.abs(b.vel.x) / 20);
+b.pos.x = (b.pos.x < b.radius) ? b.radius : canvas.width - b.radius;
+b.vel.x *= railRestitution;
+if (!b.hitRail) { this.shotData.hitRailAfterContact = true; b.hitRail = true; }
+}
+if ((b.pos.y < b.radius) || (b.pos.y > canvas.height - b.radius)) {
+Sound.playRailHit(Math.abs(b.vel.y) / 20);
+b.pos.y = (b.pos.y < b.radius) ? b.radius : canvas.height - b.radius;
+b.vel.y *= railRestitution;
+if (!b.hitRail) { this.shotData.hitRailAfterContact = true; b.hitRail = true; }
+}
+});
+},
+isMoving() { return balls.some(b => !b.isSunk && b.vel.magnitude() > 0.05); }
+};
+const Game = {
+currentPlayer: p1,
+isTableOpen: true,
+isBreakShot: true,
+animationFrame: null,
+lastTime: 0,
+accumulator: 0,
+initializeTable() {
+const w = canvas.width, h = canvas.height;
+const ballRadius = w / 48;
+pockets = [];
+const corner = ballRadius * 0.5, side = ballRadius * 0.2;
+pockets.push(
+new Pocket(new Vector(corner, corner), true),
+new Pocket(new Vector(w / 2, -side), false),
+new Pocket(new Vector(w - corner, corner), true),
+new Pocket(new Vector(corner, h - corner), true),
+new Pocket(new Vector(w / 2, h + side), false),
+new Pocket(new Vector(w - corner, h - corner), true)
+);
+pockets.forEach(p => { p.radius = p.isCorner ? ballRadius * 1.6 : ballRadius * 1.7; });
+balls = [];
+balls.push(new Ball(new Vector(w / 4, h / 2), 0));
+let numbered = Array.from({length: 15}, (_, i) => i + 1).filter(n => n !== 8);
+numbered.sort(() => Math.random() - 0.5);
+const solids = numbered.filter(n => n < 8);
+const stripes = numbered.filter(n => n > 8);
+const rack = new Array(15);
+rack[4] = 8;
+rack[10] = solids.pop();
+rack[14] = stripes.pop();
+const remain = [...solids, ...stripes].sort(() => Math.random() - 0.5);
+for (let i = 0, idx = 0; i < 15; i++) if (typeof rack[i] === 'undefined') rack[i] = remain[idx++];
+let rackIdx = 0;
+const startX = w * 0.7, sqz = 0.998;
+for (let i = 0; i < 5; i++) {
+for (let j = 0; j <= i; j++) {
+const num = rack[rackIdx++];
+const x = startX + i * (ballRadius * 2 * Math.sqrt(3) / 2 * sqz);
+const y = h / 2 + j * (ballRadius * 2 * sqz) - i * (ballRadius * sqz);
+balls.push(new Ball(new Vector(x, y), num));
+}
+}
+balls.forEach(b => { b.radius = ballRadius; b.isSunk = false; b.vel = new Vector(); });
+},
+startNewGame() {
+const isPvA = gameModeSelect.value === 'pva';
+p2.name = isPvA ? 'CPU' : 'PLAYER 2';
+p2.isAi = isPvA;
+p2NameLabel.textContent = p2.name;
+p1.ballType = null;
+p2.ballType = null;
+this.currentPlayer = p1;
+this.isTableOpen = true;
+this.isBreakShot = true;
+this.initializeTable();
+this.updateStatus(`${p1.name}: BREAK THE RACK!`);
+this.updateScoreUI();
+gameState = 'AWAITING_INPUT';
+if (!this.animationFrame) {
+this.lastTime = performance.now();
+this.accumulator = 0;
+this.animationFrame = requestAnimationFrame(t => this.loop(t));
+}
+},
+loop(currentTime) {
+if (gameState === 'GAME_OVER') { this.animationFrame = null; return; }
+let frameTime = (currentTime - this.lastTime) / 1000;
+this.lastTime = currentTime;
+if (frameTime > 0.25) frameTime = 0.25;
+this.accumulator += frameTime;
+const dt = 1 / 120;
+while (this.accumulator >= dt) {
+if (gameState === 'SHOT_IN_PROGRESS') Physics.update(dt);
+this.accumulator -= dt;
+}
+if (gameState === 'BALL_IN_HAND' && !this.currentPlayer.isAi) Input.handleBallInHand();
+this.draw();
+if (gameState === 'SHOT_IN_PROGRESS' && !Physics.isMoving()) this.evaluateTurn();
+this.animationFrame = requestAnimationFrame(t => this.loop(t));
+},
+draw() {
+ctx.clearRect(0, 0, canvas.width, canvas.height);
+if ((gameState === 'BALL_IN_HAND' || gameState === 'AWAITING_INPUT') && this.isBreakShot) {
+ctx.save();
+ctx.beginPath();
+ctx.moveTo(canvas.width / 4, 0);
+ctx.lineTo(canvas.width / 4, canvas.height);
+ctx.setLineDash([5, 10]);
+ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+ctx.lineWidth = 2;
+ctx.stroke();
+ctx.restore();
+}
+pockets.forEach(p => p.draw());
+balls.forEach(b => b.draw());
+Input.drawAimLine();
+},
+evaluateTurn() {
+const { firstHit, sunkBalls, hitRailAfterContact } = Physics.shotData;
+const sunk8 = sunkBalls.some(b => b.type === '8ball');
+const sunkCue = sunkBalls.some(b => b.type === 'cue');
+let foul = false;
+if (sunkCue) foul = true;
+else if (!firstHit) foul = true;
+else if (this.isTableOpen) { if (firstHit.type === '8ball') foul = true; }
+else {
+const remaining = balls.filter(b => b.type === this.currentPlayer.ballType && !b.isSunk).length;
+if (firstHit.type === '8ball' && remaining > 0) foul = true;
+else if (firstHit.type !== this.currentPlayer.ballType && firstHit.type !== '8ball') foul = true;
+}
+if (sunkBalls.length === 0 && firstHit && !hitRailAfterContact) foul = true;
+if (sunk8) {
+const remaining = balls.filter(b => b.type === this.currentPlayer.ballType && !b.isSunk).length;
+if (foul || this.isTableOpen || (remaining > 0 && !this.isBreakShot)) {
+this.endGame(this.getOpponent(), `WON BECAUSE ${this.currentPlayer.name} SUNK THE 8-BALL ILLEGALLY!`);
+} else {
+this.endGame(this.currentPlayer, 'WON!');
+}
+return;
+}
+if (foul) { this.handleFoul(this.isBreakShot); return; }
+let legalPot = false;
+const targetSunk = sunkBalls.filter(b => b.type === 'solid' || b.type === 'stripe');
+if (this.isTableOpen && targetSunk.length > 0) {
+const firstType = targetSunk[0].type;
+this.currentPlayer.ballType = firstType;
+this.getOpponent().ballType = firstType === 'solid' ? 'stripe' : 'solid';
+this.isTableOpen = false;
+const typeNo = this.currentPlayer.ballType === 'solid' ? 'SOLIDS' : 'STRIPES';
+this.updateStatus(`${this.currentPlayer.name} NOW HAS ${typeNo}.`);
+legalPot = true;
+} else if (!this.isTableOpen && sunkBalls.some(b => b.type === this.currentPlayer.ballType)) {
+legalPot = true;
+}
+this.updateScoreUI();
+this.isBreakShot = false;
+if (legalPot) this.continueTurn();
+else this.switchTurn(false);
+},
+handleFoul(isBreakFoul) {
+this.updateStatus(`FOUL! ${this.getOpponent().name} GETS BALL IN HAND.`);
+const cueBall = balls[0];
+if (cueBall.isSunk) cueBall.isSunk = false;
+this.switchTurn(true, isBreakFoul);
+},
+continueTurn() {
+this.updateStatus(`${this.currentPlayer.name}'S TURN. NICE SHOT!`);
+gameState = 'AWAITING_INPUT';
+if (this.currentPlayer.isAi) setTimeout(() => AI.takeShot(), 1000);
+},
+switchTurn(isFoul = false, isBreakFoul = false) {
+this.currentPlayer = this.getOpponent();
+this.updateScoreUI();
+if (isFoul) {
+gameState = 'BALL_IN_HAND';
+Input.isBreakShotPlacement = isBreakFoul;
+this.updateStatus(`${this.currentPlayer.name}: PLACE THE CUE BALL.`);
+if (this.currentPlayer.isAi) setTimeout(() => AI.placeBall(isBreakFoul), 500);
+} else {
+gameState = 'AWAITING_INPUT';
+this.updateStatus(this.currentPlayer.isAi ? "CPU IS THINKING..." : `${this.currentPlayer.name}'S TURN.`);
+if (this.currentPlayer.isAi) setTimeout(() => AI.takeShot(), 1000);
+}
+},
+endGame(winner, reason) {
+gameState = 'GAME_OVER';
+this.updateStatus(`${winner.name} ${reason}`);
+this.updateScoreUI();
+if (winner === p1) Sound.playWin(); else Sound.playLose();
+},
+getOpponent() { return this.currentPlayer === p1 ? p2 : p1; },
+updateStatus(text) { statusDisplay.textContent = text; },
+updateScoreUI() {
+p1ScoreBox.classList.toggle('current-turn', this.currentPlayer === p1 && gameState !== 'GAME_OVER');
+p2ScoreBox.classList.toggle('current-turn', this.currentPlayer === p2 && gameState !== 'GAME_OVER');
+const updatePlayerScore = (playerObj, countEl, typeEl) => {
+if (this.isTableOpen) {
+countEl.textContent = "7";
+typeEl.textContent = "OPEN";
+} else {
+const count = balls.filter(b => b.type === playerObj.ballType && !b.isSunk).length;
+countEl.textContent = count === 0 ? "8" : count;
+typeEl.textContent = playerObj.ballType === 'solid' ? "SOLIDS" : "STRIPES";
+if (count === 0) typeEl.textContent = "ONLY 8-BALL LEFT";
+}
+};
+updatePlayerScore(p1, p1CountEl, p1TypeEl);
+updatePlayerScore(p2, p2CountEl, p2TypeEl);
+},
+handleResize() {
+const container = document.getElementById('board-container');
+const avWidth = container.clientWidth - 30;
+const avHeight = container.clientHeight - 30;
+let tWidth = avWidth, tHeight = tWidth / 2;
+if (tHeight > avHeight) {
+tHeight = avHeight;
+tWidth = tHeight * 2;
+}
+const oldW = canvas.width || tWidth, oldH = canvas.height || tHeight;
+canvas.width = tWidth; canvas.height = tHeight;
+if (balls.length > 0) {
+const ballRadius = tWidth / 48;
+const corner = ballRadius * 0.5, side = ballRadius * 0.2;
+pockets[0].pos = new Vector(corner, corner);
+pockets[1].pos = new Vector(tWidth / 2, -side);
+pockets[2].pos = new Vector(tWidth - corner, corner);
+pockets[3].pos = new Vector(corner, tHeight - corner);
+pockets[4].pos = new Vector(tWidth / 2, tHeight + side);
+pockets[5].pos = new Vector(tWidth - corner, tHeight - corner);
+pockets.forEach(p => p.radius = p.isCorner ? ballRadius * 1.6 : ballRadius * 1.7);
+balls.forEach(b => {
+if (!b.isSunk) {
+b.pos.x *= (tWidth / oldW);
+b.pos.y *= (tHeight / oldH);
+}
+b.radius = ballRadius;
+});
+}
+this.draw();
+}
+};
+const Input = {
+isAiming: false, mousePos: new Vector(), isBreakShotPlacement: true,
+init() {
+const updateMousePos = (clientX, clientY) => {
+const rect = canvas.getBoundingClientRect();
+this.mousePos = new Vector(clientX - rect.left, clientY - rect.top);
+};
+const handleStart = (clientX, clientY) => {
+updateMousePos(clientX, clientY);
+if (Game.currentPlayer.isAi) return;
+if (gameState === 'AWAITING_INPUT') {
+this.isAiming = true;
+}
+};
+const handleMove = (clientX, clientY) => {
+updateMousePos(clientX, clientY);
+};
+const handleEnd = () => {
+if (Game.currentPlayer.isAi) return;
+if (gameState === 'BALL_IN_HAND') {
+const cb = balls[0];
+if (cb.displayColor === cb.baseColor) {
+gameState = 'AWAITING_INPUT';
+Game.updateStatus(`${Game.currentPlayer.name}'S TURN.`);
+this.isBreakShotPlacement = false;
+}
+} else if (gameState === 'AWAITING_INPUT' && this.isAiming) {
+this.isAiming = false;
+const cb = balls[0], vec = this.mousePos.subtract(cb.pos);
+if (vec.magnitude() < 10) return;
+gameState = 'SHOT_IN_PROGRESS';
+Physics.shotData = { sunkBalls: [], firstHit: null, hitRailAfterContact: false };
+balls.forEach(b => b.hitRail = false);
+const power = Math.min(vec.magnitude() / 5, 40);
+Sound.playShot(power / 40);
+cb.vel = vec.normalize().multiply(power);
+}
+};
+canvas.addEventListener('mousedown', e => handleStart(e.clientX, e.clientY));
+canvas.addEventListener('mousemove', e => handleMove(e.clientX, e.clientY));
+canvas.addEventListener('mouseup', handleEnd);
+canvas.addEventListener('touchstart', e => {
+e.preventDefault();
+handleStart(e.touches[0].clientX, e.touches[0].clientY);
+}, { passive: false });
+canvas.addEventListener('touchmove', e => {
+e.preventDefault();
+handleMove(e.touches[0].clientX, e.touches[0].clientY);
+}, { passive: false });
+canvas.addEventListener('touchend', e => {
+e.preventDefault();
+handleEnd();
+}, { passive: false });
+},
+handleBallInHand() {
+const cb = balls[0], r = cb.radius;
+let nx = Math.max(r, Math.min(this.isBreakShotPlacement ? canvas.width/4 - r : canvas.width - r, this.mousePos.x));
+let ny = Math.max(r, Math.min(canvas.height - r, this.mousePos.y));
+cb.pos = new Vector(nx, ny);
+cb.displayColor = balls.slice(1).some(b => !b.isSunk && cb.pos.subtract(b.pos).magnitude() < r * 2) ? '#ff4d4d' : cb.baseColor;
+},
+drawAimLine() {
+if (!this.isAiming || gameState !== 'AWAITING_INPUT' || Game.currentPlayer.isAi) return;
+const cb = balls[0], vec = this.mousePos.subtract(cb.pos);
+if (vec.magnitude() < 10) return;
+ctx.save();
+ctx.beginPath(); ctx.moveTo(cb.pos.x, cb.pos.y); ctx.lineTo(this.mousePos.x, this.mousePos.y);
+ctx.setLineDash([5, 10]); ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 3; ctx.stroke();
+const dir = vec.normalize();
+let hit = { dist: Infinity, ball: null };
+balls.forEach(b => {
+if (b.isSunk || b.number === 0) return;
+const b2c = b.pos.subtract(cb.pos), proj = b2c.dot(dir);
+if (proj <= 0) return;
+const perpSq = b2c.magnitude() ** 2 - proj ** 2, totR = cb.radius + b.radius;
+if (perpSq < totR ** 2) {
+const d = proj - Math.sqrt(totR ** 2 - perpSq);
+if (d >= 0 && d < hit.dist) hit = { dist: d, ball: b };
+}
+});
+if (hit.ball) {
+const tb = hit.ball, ip = cb.pos.add(dir.multiply(hit.dist));
+const tDir = tb.pos.subtract(ip).normalize(), ep = tb.pos.add(tDir.multiply(tb.radius * 1.5));
+ctx.beginPath(); ctx.moveTo(tb.pos.x, tb.pos.y); ctx.lineTo(ep.x, ep.y);
+ctx.strokeStyle = 'rgba(255,255,0,0.8)'; ctx.lineWidth = 2; ctx.setLineDash([4,4]); ctx.stroke();
+}
+ctx.restore();
+}
+};
+const AI = {
+isPathClear(start, end, b1, b2) {
+const lv = end.subtract(start), lMagSq = lv.x ** 2 + lv.y ** 2;
+for (const b of balls) {
+if (b.isSunk || b === b1 || b === b2) continue;
+const t = b.pos.subtract(start).dot(lv) / lMagSq;
+if (t > 0.01 && t < 0.99) {
+const cp = start.add(lv.multiply(t));
+if ((cp.x - b.pos.x)**2 + (cp.y - b.pos.y)**2 < (b.radius * 2.1)**2) return false;
+}
+}
+return true;
+},
+takeShot() {
+if (gameState !== 'AWAITING_INPUT' || !Game.currentPlayer.isAi) return;
+const level = parseInt(document.getElementById('difficulty-select').value) || 3;
+const shot = this.findBestShot(level);
+if (shot && shot.aimPos) {
+let aimVec = shot.aimPos.subtract(balls[0].pos).normalize();
+const maxAngleError = (5 - level) * 0.015;
+const maxPowerError = (5 - level) * 2;
+if (maxAngleError > 0) {
+const angle = Math.atan2(aimVec.y, aimVec.x) + (Math.random() * 2 - 1) * maxAngleError;
+aimVec = new Vector(Math.cos(angle), Math.sin(angle));
+}
+let finalPower = shot.power;
+if (maxPowerError > 0) {
+finalPower += (Math.random() * 2 - 1) * maxPowerError;
+finalPower = Math.max(3, Math.min(finalPower, 40));
+}
+balls[0].vel = aimVec.multiply(finalPower);
+Sound.playShot(finalPower / 40);
+} else {
+Game.updateStatus('CPU FAILED TO FIND A MOVE, SHOOTING RANDOMLY.');
+balls[0].vel = new Vector(Math.random()-0.5, Math.random()-0.5).normalize().multiply(15);
+}
+gameState = 'SHOT_IN_PROGRESS';
+Physics.shotData = { sunkBalls: [], firstHit: null, hitRailAfterContact: false };
+balls.forEach(b => b.hitRail = false);
+},
+findBestShot(level) {
+const cb = balls[0];
+if (Game.isBreakShot) {
+const target = balls.filter(b => b.type !== 'cue' && !b.isSunk).reduce((min, b) => b.pos.x < min.pos.x ? b : min, {pos: {x: Infinity}});
+if (target.pos.x !== Infinity) {
+const offsetY = (Math.random() * 2 - 1) * cb.radius * 0.5;
+return { score: 10000, aimPos: target.pos.add(new Vector(0, offsetY)), power: 40 };
+}
+}
+let best = { score: -Infinity, aimPos: null, power: 0 };
+let targets = Game.isTableOpen
+? balls.filter(b => !b.isSunk && b.type !== '8ball' && b.type !== 'cue')
+: balls.filter(b => b.type === Game.currentPlayer.ballType && !b.isSunk);
+if (!Game.isTableOpen && targets.length === 0) {
+targets = balls.filter(b => b.type === '8ball' && !b.isSunk);
+}
+if (targets.length === 0) return null;
+targets.forEach(t => {
+pockets.forEach(p => {
+let epp = p.pos;
+if (p.isCorner) {
+const toCenter = new Vector(canvas.width/2 - p.pos.x, canvas.height/2 - p.pos.y).normalize();
+epp = p.pos.add(toCenter.multiply(cb.radius * 0.8));
+} else {
+const toCenter = new Vector(0, canvas.height/2 - p.pos.y).normalize();
+epp = p.pos.add(toCenter.multiply(cb.radius * 0.8));
+}
+const t2p = epp.subtract(t.pos);
+const distT2P = t2p.magnitude();
+const t2pDir = t2p.normalize();
+const aim = t.pos.subtract(t2pDir.multiply(cb.radius + t.radius));
+if (!this.isPathClear(cb.pos, aim, cb, t) || !this.isPathClear(t.pos, epp, t, cb)) return;
+const cbToAim = aim.subtract(cb.pos);
+const distCbToAim = cbToAim.magnitude();
+const cbToAimDir = cbToAim.normalize();
+const ang = cbToAimDir.dot(t2pDir);
+if (ang < 0.15) return;
+let score = 1000 + ang * 500 - (distCbToAim + distT2P) * 0.5;
+if (level >= 3) {
+if (ang > 0.95 && distT2P < 300) score -= 300;
+const centerDist = aim.subtract(new Vector(canvas.width/2, canvas.height/2)).magnitude();
+score -= centerDist * 0.1;
+const tanVec = new Vector(-t2pDir.y, t2pDir.x);
+let scratchRisk = false;
+pockets.forEach(op => {
+const aimToOp = op.pos.subtract(aim).normalize();
+if (Math.abs(aimToOp.dot(tanVec)) > 0.95 && op.pos.subtract(aim).magnitude() < 400) scratchRisk = true;
+});
+if (scratchRisk) score -= 400;
+}
+if (t.type === '8ball') score += 2000;
+if (score > best.score) {
+best = { score, aimPos: aim, power: Math.min(12 + (distCbToAim + distT2P) / 25, 38) };
+}
+});
+});
+if (best.score === -Infinity && level >= 2) {
+Game.updateStatus("CPU IS CONSIDERING A BANK SHOT...");
+const r = cb.radius;
+const rails = [{y: r}, {y: canvas.height - r}, {x: r}, {x: canvas.width - r}];
+targets.forEach(t => {
+pockets.forEach(p => {
+let epp = p.pos;
+if (p.isCorner) {
+const toCenter = new Vector(canvas.width/2 - p.pos.x, canvas.height/2 - p.pos.y).normalize();
+epp = p.pos.add(toCenter.multiply(r * 0.8));
+} else {
+const toCenter = new Vector(0, canvas.height/2 - p.pos.y).normalize();
+epp = p.pos.add(toCenter.multiply(r * 0.8));
+}
+rails.forEach(rail => {
+let vp = rail.y !== undefined ? new Vector(epp.x, 2 * rail.y - epp.y) : new Vector(2 * rail.x - epp.x, epp.y);
+const t2vp = vp.subtract(t.pos);
+const distT2Vp = t2vp.magnitude();
+const bDir = t2vp.normalize();
+let bp;
+if (rail.y !== undefined) {
+const t_param = (rail.y - t.pos.y) / bDir.y;
+if (t_param < 0 || t_param > distT2Vp) return;
+bp = t.pos.add(bDir.multiply(t_param));
+} else {
+const t_param = (rail.x - t.pos.x) / bDir.x;
+if (t_param < 0 || t_param > distT2Vp) return;
+bp = t.pos.add(bDir.multiply(t_param));
+}
+let aim = t.pos.subtract(bDir.multiply(r + t.radius));
+if (!this.isPathClear(cb.pos, aim, cb, t) || !this.isPathClear(t.pos, bp, t, cb) || !this.isPathClear(bp, epp, t, cb)) return;
+const cbToAim = aim.subtract(cb.pos);
+const ang = cbToAim.normalize().dot(bDir);
+if (ang < 0.2) return;
+let score = 500 + ang * 200 - distT2Vp * 0.5 - cbToAim.magnitude() * 0.5;
+if (t.type === '8ball') score += 1000;
+if (score > best.score) {
+best = { score, aimPos: aim, power: Math.min(15 + (cbToAim.magnitude() + distT2Vp)/20, 40) };
+}
+});
+});
+});
+}
+if (best.score === -Infinity) {
+Game.updateStatus("CPU IS PLAYING A SAFETY SHOT.");
+targets.forEach(t => {
+const aim = t.pos;
+if (!this.isPathClear(cb.pos, aim, cb, t)) return;
+let score = 200 - cb.pos.subtract(t.pos).magnitude();
+if (score > best.score) {
+best = { score, aimPos: aim, power: Math.min(8 + cb.pos.subtract(t.pos).magnitude()/40, 20) };
+}
+});
+}
+if (best.score === -Infinity) {
+const fallbackTarget = targets[0] || balls[1];
+best = { score: 0, aimPos: new Vector(cb.pos.x > canvas.width/2 ? 0 : canvas.width, fallbackTarget.pos.y), power: 15 };
+}
+return best;
+},
+placeBall(isBreak) {
+let best = { score: -Infinity, pos: null };
+const cb = balls[0], step = cb.radius * 3;
+for (let x = cb.radius; x < (isBreak ? canvas.width/4 - cb.radius : canvas.width - cb.radius); x += step) {
+for (let y = cb.radius; y < canvas.height; y += step) {
+const tPos = new Vector(x, y);
+if (balls.slice(1).some(b => !b.isSunk && tPos.subtract(b.pos).magnitude() < cb.radius * 2.1)) continue;
+cb.pos = tPos;
+const level = parseInt(document.getElementById('difficulty-select').value) || 3;
+const shot = this.findBestShot(level);
+if (shot && shot.score > best.score) best = { score: shot.score, pos: tPos };
+}
+}
+cb.pos = best.pos || new Vector(isBreak ? canvas.width/8 : canvas.width/2, canvas.height/2);
+gameState = 'AWAITING_INPUT';
+Game.updateStatus("CPU'S TURN.");
+setTimeout(() => this.takeShot(), 1000);
+}
+};
+window.addEventListener('resize', () => Game.handleResize());
+Sound.init();
+Input.init();
+Game.handleResize();
+Game.startNewGame();
+</script>
+</body>
+</html>

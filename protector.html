@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Protector</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text x=%2250%22 y=%2275%22 font-size=%2280%22 text-anchor=%22middle%22>%F0%9F%94%93</text></svg>">
+<style>
+body {
+margin: 0;
+background: #000;
+color: #eee;
+font-family: sans-serif;
+display: flex;
+flex-direction: column;
+height: 100vh;
+overflow: hidden;
+}
+.toolbar {
+display: flex;
+gap: 10px;
+padding: 8px 10px;
+background: #0a0a0a;
+border-bottom: 1px solid #333;
+align-items: center;
+}
+button {
+background: #1a1a1a;
+color: #fff;
+border: 1px solid #444;
+padding: 6px 14px;
+cursor: pointer;
+font-size: 13px;
+border-radius: 2px;
+}
+button:hover {
+background: #333;
+border-color: #666;
+}
+#status {
+margin-left: auto;
+color: #00ff00;
+font-size: 13px;
+font-family: monospace;
+}
+.drop-zone {
+flex: 1;
+display: flex;
+align-items: center;
+justify-content: center;
+border: 1px dashed #333;
+margin: 5px;
+font-size: 16px;
+color: #555;
+cursor: pointer;
+transition: all 0.2s;
+background: #050505;
+}
+.drop-zone:hover, .drop-zone.active {
+border-color: #00ff00;
+color: #00ff00;
+}
+input[type="file"] {
+display: none;
+}
+</style>
+</head>
+<body>
+<div class="toolbar">
+<button id="uploadBtn">Select File</button>
+<span id="status">Ready</span>
+</div>
+<div class="drop-zone" id="dropZone">Drop large HTML file here to encrypt and download</div>
+<input type="file" id="fileInput" accept=".html">
+<script>
+const fileInput = document.getElementById('fileInput');
+const uploadBtn = document.getElementById('uploadBtn');
+const status = document.getElementById('status');
+const dropZone = document.getElementById('dropZone');
+uploadBtn.addEventListener('click', () => {
+fileInput.click();
+});
+dropZone.addEventListener('click', () => {
+fileInput.click();
+});
+dropZone.addEventListener('dragover', (e) => {
+e.preventDefault();
+dropZone.classList.add('active');
+});
+dropZone.addEventListener('dragleave', () => {
+dropZone.classList.remove('active');
+});
+dropZone.addEventListener('drop', (e) => {
+e.preventDefault();
+dropZone.classList.remove('active');
+if (e.dataTransfer.files.length) {
+handleFile(e.dataTransfer.files[0]);
+}
+});
+fileInput.addEventListener('change', (e) => {
+if (e.target.files.length) {
+handleFile(e.target.files[0]);
+}
+});
+function handleFile(file) {
+if (!file.name.endsWith('.html')) {
+status.innerText = "Error: Please upload an HTML file";
+return;
+}
+status.innerText = `Preparing: ${file.name}`;
+setTimeout(() => processFile(file), 50);
+}
+async function processFile(file) {
+try {
+const text = await file.text();
+const parser = new DOMParser();
+const doc = parser.parseFromString(text.substring(0, 15000), "text/html");
+const titleNode = doc.querySelector("title");
+const originalTitle = titleNode ? titleNode.innerText : "Protected App";
+const iconNode = doc.querySelector("link[rel*='icon']");
+const originalIcon = iconNode ? iconNode.outerHTML : "";
+await new Promise(r => setTimeout(r, 10));
+const encoder = new TextEncoder();
+const rawData = encoder.encode(text);
+status.innerText = "Compressing...";
+const cs = new CompressionStream('gzip');
+const writer = cs.writable.getWriter();
+writer.write(rawData);
+writer.close();
+const compressedBuffer = await new Response(cs.readable).arrayBuffer();
+const data = new Uint8Array(compressedBuffer);
+const keyString = Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
+const key = encoder.encode(keyString);
+const chunkSize = 1024 * 1024;
+for (let i = 0; i < data.length; i += chunkSize) {
+const end = Math.min(i + chunkSize, data.length);
+for (let j = i; j < end; j++) {
+data[j] = data[j] ^ key[j % key.length];
+}
+status.innerText = `Encrypting: ${Math.round((end / data.length) * 100)}%`;
+await new Promise(r => setTimeout(r, 0));
+}
+status.innerText = "Encoding Data...";
+await new Promise(r => setTimeout(r, 10));
+let finalB64 = "";
+const binChunk = 3 * 1024 * 10;
+for (let i = 0; i < data.length; i += binChunk) {
+const chunk = data.subarray(i, i + binChunk);
+let str = "";
+for (let j = 0; j < chunk.length; j++) {
+str += String.fromCharCode(chunk[j]);
+}
+finalB64 += btoa(str);
+if (i % (binChunk * 5) === 0) {
+status.innerText = `Encoding: ${Math.round((i / data.length) * 100)}%`;
+await new Promise(r => setTimeout(r, 0));
+}
+}
+status.innerText = "Finalizing build...";
+await new Promise(r => setTimeout(r, 10));
+const finalHTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>${originalTitle}</title>
+${originalIcon}
+<style>
+body { background-color: #000; color: #fff; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; font-family: sans-serif; overflow: hidden; }
+.s { width: 40px; height: 40px; border: 3px solid #222; border-top: 3px solid #00ff00; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+.m { font-size: 15px; color: #888; letter-spacing: 1px; }
+</style>
+</head>
+<body>
+<div class="s"></div>
+<div class="m">LOADING...</div>
+<script>
+(async function() {
+const p = "${finalB64}";
+const k = "${keyString}";
+const decoder = new TextDecoder();
+const encoder = new TextEncoder();
+const key = encoder.encode(k);
+try {
+const bin = atob(p);
+const data = new Uint8Array(bin.length);
+for (let i = 0; i < bin.length; i++) {
+data[i] = bin.charCodeAt(i) ^ key[i % key.length];
+}
+const ds = new DecompressionStream('gzip');
+const writer = ds.writable.getWriter();
+writer.write(data);
+writer.close();
+const response = new Response(ds.readable);
+const decompressedBuffer = await response.arrayBuffer();
+const html = decoder.decode(decompressedBuffer);
+document.body.innerHTML = "";
+document.head.innerHTML = "";
+document.open();
+document.write(html);
+document.close();
+} catch (e) {
+document.body.innerHTML = "Error loading application";
+}
+})();
+<\/script>
+</body>
+</html>`;
+const blob = new Blob([finalHTML], { type: 'text/html' });
+const url = URL.createObjectURL(blob);
+const a = document.createElement('a');
+a.href = url;
+a.download = file.name.replace('.html', '_protected.html');
+a.click();
+URL.revokeObjectURL(url);
+status.innerText = "Done!";
+dropZone.innerText = "Ready for another file";
+} catch (err) {
+status.innerText = "Process Failed";
+console.error(err);
+}
+}
+</script>
+</body>
+</html>

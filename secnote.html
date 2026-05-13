@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Secret Notebook</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text x=%2250%22 y=%2275%22 font-size=%2280%22 text-anchor=%22middle%22>%F0%9F%93%95</text></svg>">
+<style>
+body,
+html {
+margin: 0;
+padding: 0;
+width: 100%;
+height: 100%;
+background-color: #1e1e1e;
+color: #d4d4d4;
+font-family: monospace;
+font-size: 16px;
+overflow: hidden;
+}
+#editor {
+width: 100%;
+height: 100%;
+padding: 50px 5px 5px 5px;
+box-sizing: border-box;
+outline: none;
+white-space: pre-wrap;
+word-wrap: break-word;
+overflow-y: auto;
+transition: width 0.3s ease, margin 0.3s ease;
+}
+#editor.centered {
+width: 512px;
+margin: 0 auto;
+}
+#editor img {
+max-width: 100%;
+min-width: 100%;
+height: auto;
+margin: 0;
+display: block;
+}
+#controls {
+position: fixed;
+top: 0;
+left: 0;
+width: 100%;
+background-color: #1e1e1e;
+border-bottom: 1px solid #444;
+z-index: 100;
+display: flex;
+justify-content: center;
+padding: 8px;
+box-sizing: border-box;
+gap: 6px;
+}
+#controls button {
+background-color: #333;
+color: #fff;
+border: 1px solid #444;
+padding: 6px 12px;
+cursor: pointer;
+font-family: monospace;
+border-radius: 2px;
+}
+#controls button:hover {
+background-color: #444;
+}
+:fullscreen #controls {
+display: none;
+}
+:fullscreen #editor {
+padding-top: 5px;
+}
+.modal {
+display: none;
+position: fixed;
+top: 0;
+left: 0;
+width: 100%;
+height: 100%;
+background: rgba(0, 0, 0, 0.9);
+z-index: 1000;
+justify-content: center;
+align-items: center;
+flex-direction: column;
+}
+.modal-content {
+background: #1e1e1e;
+padding: 30px;
+border-radius: 4px;
+border: 1px solid #444;
+max-width: 600px;
+width: 80%;
+line-height: 1.6;
+}
+.modal-content h2 {
+margin-top: 0;
+}
+.close-btn {
+margin-top: 20px;
+background-color: #333;
+color: #fff;
+border: 1px solid #444;
+padding: 8px 16px;
+cursor: pointer;
+font-family: monospace;
+border-radius: 2px;
+}
+.close-btn:hover {
+background-color: #444;
+}
+#slideshowImage {
+max-width: 90%;
+max-height: 80%;
+object-fit: contain;
+}
+.slideshow-controls {
+margin-top: 20px;
+display: flex;
+gap: 15px;
+}
+.slideshow-controls button {
+background-color: #333;
+color: #fff;
+border: 1px solid #444;
+padding: 8px 16px;
+cursor: pointer;
+font-family: monospace;
+border-radius: 2px;
+font-size: 18px;
+}
+.slideshow-controls button:hover {
+background-color: #444;
+}
+#imageExpandBtn {
+position: absolute;
+display: none;
+background-color: rgba(51, 51, 51, 0.8);
+color: #fff;
+border: 1px solid #444;
+padding: 4px 8px;
+cursor: pointer;
+font-family: monospace;
+border-radius: 2px;
+font-size: 16px;
+z-index: 90;
+}
+#imageExpandBtn:hover {
+background-color: rgba(85, 85, 85, 0.9);
+}
+#fullscreenImageModal {
+background: #000;
+padding: 0;
+overflow: hidden;
+}
+#fullscreenImageModal img {
+width: 100%;
+height: 100%;
+object-fit: contain;
+margin: 0;
+padding: 0;
+cursor: grab;
+}
+#fullscreenImageModal img:active {
+cursor: grabbing;
+}
+.close-btn-top {
+position: absolute;
+top: 0px;
+right: 0px;
+background-color: rgba(51, 51, 51, 0.7);
+color: #fff;
+border: 1px solid #444;
+padding: 4px 4px;
+cursor: pointer;
+font-family: monospace;
+border-radius: 2px;
+font-size: 10px;
+z-index: 2001;
+}
+.close-btn-top:hover {
+background-color: rgba(68, 68, 68, 0.9);
+}
+.zoom-hint {
+position: absolute;
+bottom: 20px;
+left: 50%;
+transform: translateX(-50%);
+color: rgba(255, 255, 255, 0.6);
+background: rgba(0, 0, 0, 0.5);
+padding: 5px 15px;
+border-radius: 15px;
+font-size: 12px;
+pointer-events: none;
+z-index: 2001;
+}
+.zoom-hint.hidden {
+opacity: 0;
+}
+*::-webkit-scrollbar {
+    display: none;
+}
+* {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+</style>
+</head>
+<body>
+<input type="file" id="fileInput" accept=".txt,.encrypted" style="display:none;">
+<input type="file" id="imageInput" accept="image/*" style="display:none;">
+<div id="controls">
+<button id="helpButton" title="Help">❓</button>
+<button id="widthToggle" title="Toggle Centered Mode">↔️</button>
+<button id="fullscreenButton" title="Toggle Fullscreen">🖥️</button>
+<button id="imageButton" title="Insert Image">🖼️</button>
+<button id="slideshowButton" title="Slideshow">🎞️</button>
+<button id="saveButton" title="Save Encrypted">💾</button>
+<button id="openButton" title="Open Encrypted">📂</button>
+</div>
+<div id="editor" contenteditable="true" spellcheck="false" autofocus="true"></div>
+<div id="helpModal" class="modal">
+<div class="modal-content">
+<h2>Secret Notebook Help</h2>
+<p><strong>Security:</strong> Strong AES-GCM 256-bit encryption with PBKDF2 (1,000,000 iterations, SHA-512). Your password is never saved.</p>
+<p><strong>Images:</strong> Paste images directly or use the 🖼️ button. Images are kept at 100% original uncompressed quality. If files get too large, compress them externally first.</p>
+<p><strong>Slideshow:</strong> Click 🎞️ to view all inserted images. Use Left/Right arrows to navigate, and Escape to exit.</p>
+<p><strong>Fullscreen:</strong> Click 🖥️ to enter fullscreen mode. Hover over images and click the ⛶ button to view them in true fullscreen (you can scroll to zoom and click to drag).</p>
+<button class="close-btn" id="closeHelp">Close</button>
+</div>
+</div>
+<div id="slideshowModal" class="modal">
+<img id="slideshowImage" src="" alt="Slideshow">
+<div class="slideshow-controls">
+<button id="prevSlide">⬅️</button>
+<button id="closeSlide">❌</button>
+<button id="nextSlide">➡️</button>
+</div>
+</div>
+<button id="imageExpandBtn" title="View Fullscreen">⛶</button>
+<div id="fullscreenImageModal" class="modal">
+<button id="closeFullscreenImg" class="close-btn-top" title="Close">❌</button>
+<img id="fullscreenImg" src="" alt="Fullscreen">
+<div class="zoom-hint">Scroll to zoom • Click & drag to pan</div>
+</div>
+<script>
+const editor = document.getElementById('editor');
+const saveButton = document.getElementById('saveButton');
+const openButton = document.getElementById('openButton');
+const widthToggle = document.getElementById('widthToggle');
+const fileInput = document.getElementById('fileInput');
+const helpButton = document.getElementById('helpButton');
+const fullscreenButton = document.getElementById('fullscreenButton');
+const imageButton = document.getElementById('imageButton');
+const imageInput = document.getElementById('imageInput');
+const slideshowButton = document.getElementById('slideshowButton');
+const helpModal = document.getElementById('helpModal');
+const closeHelp = document.getElementById('closeHelp');
+const slideshowModal = document.getElementById('slideshowModal');
+const slideshowImage = document.getElementById('slideshowImage');
+const prevSlide = document.getElementById('prevSlide');
+const nextSlide = document.getElementById('nextSlide');
+const closeSlide = document.getElementById('closeSlide');
+const imageExpandBtn = document.getElementById('imageExpandBtn');
+const fullscreenImageModal = document.getElementById('fullscreenImageModal');
+const closeFullscreenImg = document.getElementById('closeFullscreenImg');
+const fullscreenImg = document.getElementById('fullscreenImg');
+const CRYPTO_PARAMS = {
+    name: 'AES-GCM',
+    iterations: 1000000,
+    saltLength: 16,
+    ivLength: 12,
+    keyLength: 256,
+    hash: 'SHA-512'
+};
+const zoomHint = document.querySelector('.zoom-hint');
+let hintTimer = null;
+let slideImages = [];
+let currentSlideIndex = 0;
+let currentHoveredImage = null;
+let imgScale = 1;
+let isPanning = false;
+let panX = 0;
+let panY = 0;
+let startX = 0;
+let startY = 0;
+function updateExpandBtnPosition() {
+    if (!currentHoveredImage) return;
+    const rect = currentHoveredImage.getBoundingClientRect();
+    imageExpandBtn.style.top = (rect.top + window.scrollY + 5) + 'px';
+    imageExpandBtn.style.left = (rect.right + window.scrollX - imageExpandBtn.offsetWidth - 5) + 'px';
+}
+document.addEventListener('mouseover', (e) => {
+    if (e.target.tagName === 'IMG' && e.target.closest('#editor')) {
+        currentHoveredImage = e.target;
+        imageExpandBtn.style.display = 'block';
+        updateExpandBtnPosition();
+    }
+});
+document.addEventListener('mousemove', (e) => {
+    if (currentHoveredImage) {
+        const rect = currentHoveredImage.getBoundingClientRect();
+        const btnRect = imageExpandBtn.getBoundingClientRect();
+        const inImage = e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom;
+        const inBtn = e.clientX >= btnRect.left && e.clientX <= btnRect.right && e.clientY >= btnRect.top && e.clientY <= btnRect.bottom;
+        if (!inImage && !inBtn) {
+            imageExpandBtn.style.display = 'none';
+            currentHoveredImage = null;
+        } else {
+            updateExpandBtnPosition();
+        }
+    }
+});
+editor.addEventListener('scroll', () => {
+    if (currentHoveredImage) {
+        imageExpandBtn.style.display = 'none';
+        currentHoveredImage = null;
+    }
+});
+function applyTransform() {
+    fullscreenImg.style.transform = `translate(${panX}px, ${panY}px) scale(${imgScale})`;
+}
+function resetZoom() {
+    imgScale = 1;
+    panX = 0;
+    panY = 0;
+    applyTransform();
+}
+fullscreenImageModal.addEventListener('wheel', (e) => {
+    if (fullscreenImageModal.style.display !== 'flex') return;
+    e.preventDefault();
+    const zoomSpeed = 0.1;
+    const delta = e.deltaY < 0 ? 1 : -1;
+    imgScale += delta * zoomSpeed;
+    if (imgScale < 0.5) imgScale = 0.5;
+    if (imgScale > 10) imgScale = 10;
+    applyTransform();
+}, { passive: false });
+fullscreenImageModal.addEventListener('mousedown', (e) => {
+    if (e.target === closeFullscreenImg) return;
+    e.preventDefault();
+    isPanning = true;
+    startX = e.clientX - panX;
+    startY = e.clientY - panY;
+});
+window.addEventListener('mouseup', () => {
+    isPanning = false;
+});
+window.addEventListener('mousemove', (e) => {
+    if (!isPanning || fullscreenImageModal.style.display !== 'flex') return;
+    e.preventDefault();
+    panX = e.clientX - startX;
+    panY = e.clientY - startY;
+    applyTransform();
+});
+imageExpandBtn.addEventListener('click', () => {
+    if (currentHoveredImage) {
+        resetZoom();
+        fullscreenImg.src = currentHoveredImage.src;
+        fullscreenImageModal.style.display = 'flex';
+        zoomHint.classList.remove('hidden');
+        clearTimeout(hintTimer);
+        hintTimer = setTimeout(() => {
+            zoomHint.classList.add('hidden');
+        }, 2000);
+        if (fullscreenImageModal.requestFullscreen) {
+            fullscreenImageModal.requestFullscreen().catch(err => console.error("Error enabling fullscreen:", err));
+        }
+    }
+});
+closeFullscreenImg.addEventListener('click', () => {
+    if (document.fullscreenElement) {
+        document.exitFullscreen();
+    }
+    fullscreenImageModal.style.display = 'none';
+    fullscreenImg.src = '';
+    resetZoom();
+});
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && fullscreenImageModal.style.display === 'flex') {
+        if (document.fullscreenElement) {
+            document.exitFullscreen();
+        }
+        fullscreenImageModal.style.display = 'none';
+        fullscreenImg.src = '';
+        resetZoom();
+    }
+});
+document.addEventListener('fullscreenchange', () => {
+    if (!document.fullscreenElement && fullscreenImageModal.style.display === 'flex') {
+        fullscreenImageModal.style.display = 'none';
+        fullscreenImg.src = '';
+        resetZoom();
+    }
+});
+widthToggle.addEventListener('click', () => {
+    editor.classList.toggle('centered');
+    editor.focus();
+});
+editor.addEventListener('paste', async (e) => {
+    e.preventDefault();
+    const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+    let foundImage = false;
+    const selection = window.getSelection();
+    let savedRange = null;
+    if (selection.rangeCount > 0) {
+        savedRange = selection.getRangeAt(0);
+    }
+    for (const item of items) {
+        if (item.type.indexOf('image') === 0) {
+            foundImage = true;
+            const blob = item.getAsFile();
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = document.createElement('img');
+                img.src = event.target.result;
+                if (savedRange) {
+                    savedRange.deleteContents();
+                    savedRange.insertNode(img);
+                    savedRange.setStartAfter(img);
+                    selection.removeAllRanges();
+                    selection.addRange(savedRange);
+                } else {
+                    editor.appendChild(img);
+                }
+            };
+            reader.readAsDataURL(blob);
+        }
+    }
+    if (!foundImage) {
+        const text = (e.clipboardData || e.originalEvent.clipboardData).getData('text/plain');
+        document.execCommand('insertText', false, text);
+    }
+});
+saveButton.addEventListener('click', async () => {
+    const password = prompt("Enter a password to encrypt this note:");
+    if (!password) {
+        alert("Save cancelled. No password provided.");
+        return;
+    }
+    try {
+        const content = editor.innerHTML;
+        const encryptedJson = await encrypt(content, password);
+        downloadFile(encryptedJson, 'note.encrypted.txt', 'application/json');
+    } catch (err) {
+        console.error("Encryption failed:", err);
+        alert("Error during encryption.");
+    }
+});
+openButton.addEventListener('click', () => {
+    fileInput.click();
+});
+fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const password = prompt("Enter password to open note:");
+    if (!password) {
+        alert("Open cancelled. No password provided.");
+        return;
+    }
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+        try {
+            const encryptedJson = event.target.result;
+            const decryptedHtml = await decrypt(encryptedJson, password);
+            editor.innerHTML = decryptedHtml;
+        } catch (err) {
+            console.error("Decryption failed:", err);
+            alert("Decryption failed. Wrong password or corrupted file.");
+        } finally {
+            fileInput.value = null;
+        }
+    };
+    reader.readAsText(file);
+});
+helpButton.addEventListener('click', () => {
+    helpModal.style.display = 'flex';
+});
+closeHelp.addEventListener('click', () => {
+    helpModal.style.display = 'none';
+});
+fullscreenButton.addEventListener('click', () => {
+    if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen();
+    } else {
+        if (document.exitFullscreen) {
+            document.exitFullscreen();
+        }
+    }
+});
+imageButton.addEventListener('click', () => {
+    imageInput.click();
+});
+imageInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    editor.focus();
+    const selection = window.getSelection();
+    let savedRange = null;
+    if (selection.rangeCount > 0) {
+        savedRange = selection.getRangeAt(0);
+    }
+    const reader = new FileReader();
+    reader.onload = function(event) {
+        const img = document.createElement('img');
+        img.src = event.target.result;
+        if (savedRange) {
+            savedRange.deleteContents();
+            savedRange.insertNode(img);
+            savedRange.setStartAfter(img);
+            selection.removeAllRanges();
+            selection.addRange(savedRange);
+        } else {
+            editor.appendChild(img);
+        }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = null;
+});
+slideshowButton.addEventListener('click', () => {
+    const imgs = editor.querySelectorAll('img');
+    slideImages = [];
+    for (let i = 0; i < imgs.length; i++) {
+        slideImages.push(imgs[i].src);
+    }
+    if (slideImages.length === 0) {
+        alert("No images found in the notebook.");
+        return;
+    }
+    currentSlideIndex = 0;
+    updateSlide();
+    slideshowModal.style.display = 'flex';
+    document.addEventListener('keydown', handleSlideKeys);
+});
+closeSlide.addEventListener('click', () => {
+    exitSlideshow();
+});
+prevSlide.addEventListener('click', () => {
+    currentSlideIndex--;
+    if (currentSlideIndex < 0) currentSlideIndex = slideImages.length - 1;
+    updateSlide();
+});
+nextSlide.addEventListener('click', () => {
+    currentSlideIndex++;
+    if (currentSlideIndex >= slideImages.length) currentSlideIndex = 0;
+    updateSlide();
+});
+function updateSlide() {
+    slideshowImage.src = slideImages[currentSlideIndex];
+}
+function handleSlideKeys(e) {
+    if (slideshowModal.style.display !== 'flex') return;
+    if (e.key === 'ArrowRight') {
+        currentSlideIndex++;
+        if (currentSlideIndex >= slideImages.length) currentSlideIndex = 0;
+        updateSlide();
+    } else if (e.key === 'ArrowLeft') {
+        currentSlideIndex--;
+        if (currentSlideIndex < 0) currentSlideIndex = slideImages.length - 1;
+        updateSlide();
+    } else if (e.key === 'Escape') {
+        exitSlideshow();
+    }
+}
+function exitSlideshow() {
+    slideshowModal.style.display = 'none';
+    document.removeEventListener('keydown', handleSlideKeys);
+    slideshowImage.src = '';
+}
+async function deriveKey(password, salt) {
+    const enc = new TextEncoder();
+    const keyMaterial = await crypto.subtle.importKey(
+        'raw',
+        enc.encode(password), {
+            name: 'PBKDF2'
+        },
+        false,
+        ['deriveKey']
+    );
+    return crypto.subtle.deriveKey({
+            name: 'PBKDF2',
+            salt: salt,
+            iterations: CRYPTO_PARAMS.iterations,
+            hash: CRYPTO_PARAMS.hash
+        },
+        keyMaterial, {
+            name: CRYPTO_PARAMS.name,
+            length: CRYPTO_PARAMS.keyLength
+        },
+        true,
+        ['encrypt', 'decrypt']
+    );
+}
+async function encrypt(plaintext, password) {
+    const enc = new TextEncoder();
+    const data = enc.encode(plaintext);
+    const salt = crypto.getRandomValues(new Uint8Array(CRYPTO_PARAMS.saltLength));
+    const iv = crypto.getRandomValues(new Uint8Array(CRYPTO_PARAMS.ivLength));
+    const key = await deriveKey(password, salt);
+    const encryptedBuffer = await crypto.subtle.encrypt({
+            name: CRYPTO_PARAMS.name,
+            iv: iv
+        },
+        key,
+        data
+    );
+    return JSON.stringify({
+        salt: arrayBufferToBase64(salt),
+        iv: arrayBufferToBase64(iv),
+        ciphertext: arrayBufferToBase64(encryptedBuffer)
+    });
+}
+async function decrypt(encryptedJson, password) {
+    const data = JSON.parse(encryptedJson);
+    const salt = base64ToArrayBuffer(data.salt);
+    const iv = base64ToArrayBuffer(data.iv);
+    const ciphertext = base64ToArrayBuffer(data.ciphertext);
+    const key = await deriveKey(password, salt);
+    const decryptedBuffer = await crypto.subtle.decrypt({
+            name: CRYPTO_PARAMS.name,
+            iv: iv
+        },
+        key,
+        ciphertext
+    );
+    const dec = new TextDecoder();
+    return dec.decode(decryptedBuffer);
+}
+function downloadFile(content, fileName, contentType) {
+    const a = document.createElement('a');
+    const file = new Blob([content], {
+        type: contentType
+    });
+    a.href = URL.createObjectURL(file);
+    a.download = fileName;
+    a.click();
+    URL.revokeObjectURL(a.href);
+}
+function arrayBufferToBase64(buffer) {
+    let binary = '';
+    const bytes = new Uint8Array(buffer);
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return window.btoa(binary);
+}
+function base64ToArrayBuffer(base64) {
+    const binary_string = window.atob(base64);
+    const len = binary_string.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+        bytes[i] = binary_string.charCodeAt(i);
+    }
+    return bytes.buffer;
+}
+editor.focus();
+</script>
+</body>
+</html>

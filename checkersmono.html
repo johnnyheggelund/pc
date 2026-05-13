@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Checkers Mono</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text x=%2250%22 y=%2275%22 font-size=%2280%22 text-anchor=%22middle%22>%F0%9F%94%B4</text></svg>">
+<style>
+:root {
+--bg-color: #000000;
+--text-color: #00ff00;
+--border-color: #004400;
+--active-border: #00ff00;
+}
+body {
+background-color: var(--bg-color);
+color: var(--text-color);
+font-family: 'Courier New', Courier, monospace;
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+padding: 20px;
+margin: 0;
+min-height: 100vh;
+box-sizing: border-box;
+overflow: hidden;
+font-size: 18px;
+font-weight: bold;
+}
+h1 {
+display: none;
+}
+#game-area {
+position: relative;
+width: 100%;
+height: 100%;
+display: flex;
+flex-direction: row;
+justify-content: center;
+align-items: center;
+gap: 40px;
+--cell-size: min(10vmin, 70px);
+}
+#info-panel {
+width: 300px;
+padding: 20px;
+background-color: #000000;
+border: 3px solid var(--border-color);
+border-radius: 0;
+box-shadow: none;
+text-align: center;
+flex-shrink: 0;
+display: flex;
+flex-direction: column;
+gap: 20px;
+}
+#info-panel p {
+color: #00ff00;
+font-size: 18px;
+margin: 5px 0;
+text-transform: uppercase;
+}
+#status {
+margin-bottom: 10px;
+font-size: 20px;
+min-height: 30px;
+font-weight: bold;
+color: #00ff00;
+text-decoration: underline;
+}
+.button-group {
+display: flex;
+flex-direction: column;
+gap: 15px;
+width: 100%;
+}
+button {
+background-color: #000000;
+color: #008800;
+border: 3px solid var(--border-color);
+padding: 15px;
+text-align: center;
+text-decoration: none;
+font-size: 18px;
+font-weight: bold;
+cursor: pointer;
+border-radius: 6px;
+transition: all 0.2s;
+box-shadow: none;
+font-family: 'Courier New', Courier, monospace;
+text-transform: uppercase;
+}
+button:hover {
+background-color: #002200;
+color: #00ff00;
+border-color: #00ff00;
+transform: none;
+box-shadow: 0 0 10px #00ff00;
+}
+select#difficulty-select {
+background-color: #000000;
+color: #00ff00;
+border: 3px solid var(--border-color);
+padding: 10px;
+border-radius: 4px;
+font-size: 18px;
+font-weight: bold;
+cursor: pointer;
+width: 100%;
+font-family: 'Courier New', Courier, monospace;
+}
+#board-container {
+display: flex;
+flex-direction: column;
+box-shadow: 0 0 20px var(--border-color);
+border-radius: 0;
+overflow: hidden;
+border: 4px solid var(--border-color);
+flex-shrink: 0;
+}
+.row {
+display: flex;
+}
+.cell {
+width: var(--cell-size);
+height: var(--cell-size);
+display: flex;
+justify-content: center;
+align-items: center;
+font-size: calc(var(--cell-size) * 0.6);
+cursor: pointer;
+position: relative;
+border: 1px solid #002200;
+}
+.light {
+background-color: #000000;
+}
+.dark {
+background-color: #001100;
+}
+.highlighted {
+background-color: #004400 !important;
+box-shadow: inset 0 0 10px #00ff00;
+}
+.piece {
+width: 75%;
+height: 75%;
+border-radius: 50%;
+position: relative;
+transition: transform 0.2s ease-out;
+box-shadow: none;
+z-index: 1;
+}
+.player-piece {
+background: #00ff00;
+border: 2px solid #00ff00;
+}
+.player-piece.king::after {
+color: #000000;
+text-shadow: none;
+font-weight: 900;
+}
+.ai-piece {
+background: #000000;
+border: 4px solid #00ff00;
+}
+.ai-piece.king::after {
+color: #00ff00;
+text-shadow: 0 0 5px #00ff00;
+}
+.king::after {
+content: 'K';
+position: absolute;
+top: 50%;
+left: 50%;
+transform: translate(-50%, -50%);
+font-size: calc(var(--cell-size) * 0.5);
+font-family: monospace;
+}
+.selected {
+box-shadow: 0 0 15px #00ff00, inset 0 0 5px #000000;
+border-color: #ffffff;
+z-index: 10;
+}
+.moving-piece {
+position: absolute;
+z-index: 100;
+pointer-events: none;
+transition: transform 0.3s ease-in-out;
+}
+@keyframes pulse-green {
+0% { box-shadow: 0 0 0 0 rgba(0, 255, 0, 0.7); }
+70% { box-shadow: 0 0 0 15px rgba(0, 255, 0, 0); }
+100% { box-shadow: 0 0 0 0 rgba(0, 255, 0, 0); }
+}
+.must-capture {
+animation: pulse-green 1.5s infinite;
+z-index: 10;
+border-color: #ffffff !important;
+}
+.shake {
+animation: shake 0.4s ease-in-out;
+border-color: #ff0000 !important;
+box-shadow: 0 0 15px #ff0000;
+}
+@keyframes shake {
+0%, 100% { transform: translateX(0); }
+25% { transform: translateX(-5px); }
+75% { transform: translateX(5px); }
+}
+.modal-overlay {
+position: fixed;
+top: 0;
+left: 0;
+width: 100%;
+height: 100%;
+background-color: rgba(0, 0, 0, 0.95);
+display: flex;
+justify-content: center;
+align-items: center;
+z-index: 1000;
+}
+.modal-content {
+background-color: #000000;
+padding: 30px;
+border: 4px solid #00ff00;
+border-radius: 0;
+box-shadow: 0 0 30px rgba(0, 255, 0, 0.2);
+max-width: 600px;
+max-height: 90vh;
+overflow-y: auto;
+color: #00ff00;
+text-align: left;
+position: relative;
+font-family: 'Courier New', Courier, monospace;
+}
+.modal-content h2 {
+color: #00ff00;
+text-align: center;
+border-bottom: 2px solid #004400;
+padding-bottom: 10px;
+font-size: 24px;
+}
+.modal-content li {
+margin-bottom: 15px;
+font-size: 18px;
+line-height: 1.5;
+}
+.modal-close-btn {
+position: absolute;
+top: 10px;
+right: 15px;
+background: none;
+border: none;
+font-size: 40px;
+color: #00ff00;
+cursor: pointer;
+padding: 0;
+}
+.modal-close-btn:hover {
+color: #ffffff;
+border: none;
+background: none;
+box-shadow: none;
+}
+.hidden {
+display: none;
+}
+.control-group label {
+display: none;
+}
+</style>
+</head>
+<body>
+<div id="game-area">
+<div id="info-panel">
+<div class="control-group">
+<label for="difficulty-select"></label>
+<select id="difficulty-select">
+<option value="1" selected>Easy</option>
+<option value="3">Medium</option>
+<option value="5">Hard</option>
+</select>
+</div>
+<div class="button-group">
+<button id="reset-btn">New Game</button>
+<button id="how-to-play-btn">How to Play</button>
+</div>
+<p>Player: Red / AI: Blue</p>
+<div id="status"></div>
+</div>
+<div id="board-container"></div>
+</div>
+<div id="how-to-play-modal" class="modal-overlay hidden">
+<div class="modal-content">
+<button class="modal-close-btn" id="modal-close-btn">&times;</button>
+<h2>How to Play (US Standard Rules)</h2>
+<ul>
+<li><strong>Objective:</strong> Capture all of your opponent's pieces, or block them so they cannot make any valid moves.</li>
+<li><strong>Setup:</strong> The board has alternating dark and light squares. Pieces are placed only on the dark squares.</li>
+<li><strong>Movement:</strong>
+<ul>
+<li>Click on one of your pieces (red) to start moving. Pieces move diagonally forward (towards the opponent's side) one square at a time.</li>
+<li>Player pieces (Red) move upwards (decreasing row index). AI pieces (Blue) move downwards (increasing row index).</li>
+</ul>
+</li>
+<li><strong>Capturing:</strong>
+<ul>
+<li>To capture an opponent's piece, you must jump over it diagonally to an empty square immediately beyond it. The captured piece is removed from the board.</li>
+<li><strong>Mandatory Captures:</strong> If you have an opportunity to capture a piece, you *must* take it. You cannot choose a non-capture move if a capture is available.</li>
+<li><strong>Multi-Jumps:</strong> If, after a capture, your piece is in a position to make another capture, you must continue jumping until no more captures are possible with that same piece.</li>
+</ul>
+</li>
+<li><strong>Kings:</strong>
+<ul>
+<li>When a piece reaches the opponent's back row, it becomes a King. <strong>The turn ends immediately upon promotion</strong> (you cannot continue jumping).</li>
+<li>Kings are marked with a '★' and can move and capture both forward and backward diagonally, but still only one square/jump at a time.</li>
+</ul>
+</li>
+<li><strong>Winning:</strong> You win if you capture all of the AI's pieces, or if the AI has no legal moves left. The AI wins under the same conditions.</li>
+</ul>
+</div>
+</div>
+<script>
+const ROWS = 8;
+const COLS = 8;
+const PLAYER = 1;
+const AI = 2;
+const EMPTY = 0;
+const boardEl = document.getElementById('board-container');
+const statusEl = document.getElementById('status');
+const resetButton = document.getElementById('reset-btn');
+const howToPlayButton = document.getElementById('how-to-play-btn');
+const modalOverlay = document.getElementById('how-to-play-modal');
+const modalCloseBtn = document.getElementById('modal-close-btn');
+const difficultySelect = document.getElementById('difficulty-select');
+const ANIMATION_DURATION = 300;
+let board;
+let currentPlayer;
+let selectedPiece = null;
+let mustCapture = false;
+let pendingMultiJump = null;
+let isAITurn = false;
+let gameOver = false;
+let isAnimating = false;
+let aiDepth = 1;
+let audioContext;
+function getDynamicCellSize() {
+const vmin = Math.min(window.innerWidth, window.innerHeight);
+return Math.min(vmin * 0.1, 60);
+}
+function setupAudio() {
+audioContext = new(window.AudioContext || window.webkitAudioContext)();
+window.playSoundMove = () => {
+if (audioContext.state === 'suspended') {
+audioContext.resume();
+}
+const primaryGain = audioContext.createGain();
+primaryGain.connect(audioContext.destination);
+primaryGain.gain.setValueAtTime(0.3, audioContext.currentTime);
+primaryGain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.15);
+const osc1 = audioContext.createOscillator();
+osc1.type = 'sine';
+osc1.frequency.setValueAtTime(440, audioContext.currentTime);
+osc1.frequency.exponentialRampToValueAtTime(550, audioContext.currentTime + 0.15);
+osc1.connect(primaryGain);
+osc1.start(audioContext.currentTime);
+osc1.stop(audioContext.currentTime + 0.15);
+const osc2 = audioContext.createOscillator();
+osc2.type = 'triangle';
+osc2.frequency.setValueAtTime(880, audioContext.currentTime);
+osc2.frequency.exponentialRampToValueAtTime(1100, audioContext.currentTime + 0.15);
+osc2.connect(primaryGain);
+osc2.start(audioContext.currentTime);
+osc2.stop(audioContext.currentTime + 0.15);
+};
+window.playSoundCapture = () => {
+const primaryGain = audioContext.createGain();
+primaryGain.connect(audioContext.destination);
+primaryGain.gain.setValueAtTime(0.5, audioContext.currentTime);
+primaryGain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.3);
+const osc1 = audioContext.createOscillator();
+osc1.type = 'sawtooth';
+osc1.frequency.setValueAtTime(200, audioContext.currentTime);
+osc1.frequency.exponentialRampToValueAtTime(150, audioContext.currentTime + 0.3);
+osc1.connect(primaryGain);
+osc1.start(audioContext.currentTime);
+osc1.stop(audioContext.currentTime + 0.3);
+const osc2 = audioContext.createOscillator();
+osc2.type = 'square';
+osc2.frequency.setValueAtTime(100, audioContext.currentTime);
+osc2.frequency.exponentialRampToValueAtTime(75, audioContext.currentTime + 0.3);
+osc2.connect(primaryGain);
+osc2.start(audioContext.currentTime);
+osc2.stop(audioContext.currentTime + 0.3);
+};
+window.playSoundError = () => {
+const gainNode = audioContext.createGain();
+gainNode.connect(audioContext.destination);
+gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.2);
+const osc = audioContext.createOscillator();
+osc.type = 'sawtooth';
+osc.frequency.setValueAtTime(150, audioContext.currentTime);
+osc.frequency.linearRampToValueAtTime(100, audioContext.currentTime + 0.2);
+osc.connect(gainNode);
+osc.start(audioContext.currentTime);
+osc.stop(audioContext.currentTime + 0.2);
+};
+window.playSoundWin = () => {
+const now = audioContext.currentTime;
+const notes = [523.25, 659.25, 783.99, 1046.50];
+notes.forEach((freq, i) => {
+const osc = audioContext.createOscillator();
+const gain = audioContext.createGain();
+osc.connect(gain);
+gain.connect(audioContext.destination);
+osc.type = 'triangle';
+osc.frequency.value = freq;
+gain.gain.setValueAtTime(0, now + i * 0.1);
+gain.gain.linearRampToValueAtTime(0.2, now + i * 0.1 + 0.05);
+gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.1 + 0.4);
+osc.start(now + i * 0.1);
+osc.stop(now + i * 0.1 + 0.5);
+});
+};
+window.playSoundLose = () => {
+const now = audioContext.currentTime;
+const notes = [392.00, 311.13, 261.63];
+notes.forEach((freq, i) => {
+const osc = audioContext.createOscillator();
+const gain = audioContext.createGain();
+osc.connect(gain);
+gain.connect(audioContext.destination);
+osc.type = 'sawtooth';
+osc.frequency.setValueAtTime(freq, now + i * 0.4);
+if (i === 2) {
+osc.frequency.linearRampToValueAtTime(180, now + i * 0.4 + 1.2);
+}
+gain.gain.setValueAtTime(0, now + i * 0.4);
+gain.gain.linearRampToValueAtTime(0.2, now + i * 0.4 + 0.1);
+gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.4 + (i === 2 ? 1.2 : 0.6));
+osc.start(now + i * 0.4);
+osc.stop(now + i * 0.4 + (i === 2 ? 1.5 : 0.7));
+});
+};
+}
+function showModal() {
+modalOverlay.classList.remove('hidden');
+}
+function hideModal() {
+modalOverlay.classList.add('hidden');
+}
+function initializeBoard() {
+aiDepth = parseInt(difficultySelect.value);
+board = Array(ROWS).fill(0).map(() => Array(COLS).fill(EMPTY));
+for (let r = 5; r < ROWS; r++) {
+for (let c = 0; c < COLS; c++) {
+if ((r + c) % 2 !== 0) {
+board[r][c] = {
+owner: PLAYER,
+isKing: false
+};
+}
+}
+}
+for (let r = 0; r < 3; r++) {
+for (let c = 0; c < COLS; c++) {
+if ((r + c) % 2 !== 0) {
+board[r][c] = {
+owner: AI,
+isKing: false
+};
+}
+}
+}
+currentPlayer = PLAYER;
+selectedPiece = null;
+pendingMultiJump = null;
+mustCapture = hasMandatoryCaptureForPlayer(board, PLAYER);
+isAITurn = false;
+gameOver = false;
+isAnimating = false;
+renderBoard();
+const diffLabels = {
+1: "Easy",
+3: "Medium",
+5: "Hard"
+};
+const label = diffLabels[aiDepth] || "Custom";
+updateStatus(`New Game Started! (${label} Mode)`);
+setTimeout(() => {
+if (!gameOver && statusEl.textContent.includes("New Game")) {
+updateStatus('');
+}
+}, 2000);
+}
+function updateStatus(message = '') {
+statusEl.textContent = message;
+}
+function isValidCoord(r, c) {
+return r >= 0 && r < ROWS && c >= 0 && c < COLS;
+}
+function deepCopyBoard(b) {
+return b.map(row => row.map(cell =>
+cell === EMPTY ? EMPTY : {
+owner: cell.owner,
+isKing: cell.isKing
+}
+));
+}
+function getMovesForPiece(boardState, r, c, owner, isKing) {
+const moves = [];
+const opponent = (owner === PLAYER) ? AI : PLAYER;
+const possibleDrs = [];
+if (owner === PLAYER || isKing) {
+possibleDrs.push(-1);
+}
+if (owner === AI || isKing) {
+possibleDrs.push(1);
+}
+const dcs = [-1, 1];
+for (const dr of possibleDrs) {
+for (const dc of dcs) {
+const nr = r + dr;
+const nc = c + dc;
+if (isValidCoord(nr, nc)) {
+const target = boardState[nr][nc];
+if (target === EMPTY) {
+moves.push({
+fromR: r,
+fromC: c,
+toR: nr,
+toC: nc,
+isCapture: false
+});
+} else if (target.owner === opponent) {
+const jumpR = nr + dr;
+const jumpC = nc + dc;
+if (isValidCoord(jumpR, jumpC) && boardState[jumpR][jumpC] === EMPTY) {
+moves.push({
+fromR: r,
+fromC: c,
+toR: jumpR,
+toC: jumpC,
+isCapture: true,
+capturedR: nr,
+capturedC: nc
+});
+}
+}
+}
+}
+}
+return moves;
+}
+function getCapturesForPiece(boardState, r, c, owner, isKing) {
+return getMovesForPiece(boardState, r, c, owner, isKing).filter(move => move.isCapture);
+}
+function hasMandatoryCaptureForPlayer(boardState, owner) {
+for (let r = 0; r < ROWS; r++) {
+for (let c = 0; c < COLS; c++) {
+const piece = boardState[r][c];
+if (piece && piece.owner === owner) {
+if (getCapturesForPiece(boardState, r, c, piece.owner, piece.isKing).length > 0) {
+return true;
+}
+}
+}
+}
+return false;
+}
+function getAllMovesForPlayer(boardState, owner) {
+const allMoves = [];
+const mandatoryCapture = hasMandatoryCaptureForPlayer(boardState, owner);
+for (let r = 0; r < ROWS; r++) {
+for (let c = 0; c < COLS; c++) {
+const piece = boardState[r][c];
+if (piece && piece.owner === owner) {
+const pieceMoves = getMovesForPiece(boardState, r, c, piece.owner, piece.isKing);
+if (mandatoryCapture) {
+allMoves.push(...pieceMoves.filter(m => m.isCapture));
+} else {
+allMoves.push(...pieceMoves);
+}
+}
+}
+}
+return allMoves;
+}
+function getValidMovesForSelectedPiece(r, c) {
+const piece = board[r][c];
+if (!piece || piece.owner !== currentPlayer) return [];
+const allPossibleMoves = getMovesForPiece(board, r, c, piece.owner, piece.isKing);
+if (pendingMultiJump && pendingMultiJump.fromR === r && pendingMultiJump.fromC === c) {
+return allPossibleMoves.filter(move => move.isCapture);
+}
+if (mustCapture) {
+return allPossibleMoves.filter(move => move.isCapture);
+}
+return allPossibleMoves;
+}
+function countPieces(boardState, owner) {
+let count = 0;
+for (let r = 0; r < ROWS; r++) {
+for (let c = 0; c < COLS; c++) {
+const piece = boardState[r][c];
+if (piece && piece.owner === owner) {
+count++;
+}
+}
+}
+return count;
+}
+function getWinnerInTerminalState(boardState, forPlayer) {
+const playerPieces = countPieces(boardState, PLAYER);
+const aiPieces = countPieces(boardState, AI);
+if (playerPieces === 0) return AI;
+if (aiPieces === 0) return PLAYER;
+const hasMoves = getAllMovesForPlayer(boardState, forPlayer).length > 0;
+if (!hasMoves) {
+return (forPlayer === PLAYER) ? AI : PLAYER;
+}
+return null;
+}
+function checkGameOver() {
+const winner = getWinnerInTerminalState(board, currentPlayer);
+if (winner !== null) {
+const winnerName = winner === PLAYER ? "Player (Red)" : "AI (Blue)";
+updateStatus(`Game Over! ${winnerName} Wins!`);
+gameOver = true;
+if (winner === PLAYER) {
+playSoundWin();
+} else {
+playSoundLose();
+}
+return true;
+}
+return false;
+}
+function endTurn() {
+selectedPiece = null;
+pendingMultiJump = null;
+currentPlayer = (currentPlayer === PLAYER) ? AI : PLAYER;
+mustCapture = hasMandatoryCaptureForPlayer(board, currentPlayer);
+renderBoard();
+if (checkGameOver()) {
+isAITurn = false;
+return;
+}
+if (currentPlayer === AI) {
+isAITurn = true;
+setTimeout(() => makeAIMove(), 500);
+} else {
+isAITurn = false;
+}
+}
+async function animateAndExecuteMove(move) {
+isAnimating = true;
+const cellSize = getDynamicCellSize();
+const {
+fromR,
+fromC,
+toR,
+toC,
+isCapture,
+capturedR,
+capturedC
+} = move;
+const cellEl = boardEl.querySelector(`[data-r="${fromR}"][data-c="${fromC}"]`);
+const pieceEl = cellEl.querySelector('.piece');
+if (!pieceEl) {
+isAnimating = false;
+return;
+}
+const cloneEl = pieceEl.cloneNode(true);
+cloneEl.classList.add('moving-piece');
+cloneEl.style.width = pieceEl.offsetWidth + 'px';
+cloneEl.style.height = pieceEl.offsetHeight + 'px';
+cloneEl.style.left = pieceEl.offsetLeft + cellEl.offsetLeft + 'px';
+cloneEl.style.top = pieceEl.offsetTop + cellEl.offsetTop + 'px';
+boardEl.appendChild(cloneEl);
+pieceEl.style.opacity = '0';
+requestAnimationFrame(() => {
+requestAnimationFrame(() => {
+cloneEl.style.transform = `translate(${(toC - fromC) * cellSize}px, ${(toR - fromR) * cellSize}px)`;
+});
+});
+await new Promise(resolve => setTimeout(resolve, ANIMATION_DURATION));
+const piece = board[fromR][fromC];
+board[toR][toC] = piece;
+board[fromR][fromC] = EMPTY;
+if (isCapture) {
+board[capturedR][capturedC] = EMPTY;
+playSoundCapture();
+} else {
+playSoundMove();
+}
+let wasPromoted = false;
+if (piece.owner === PLAYER && toR === 0) {
+piece.isKing = true;
+wasPromoted = true;
+} else if (piece.owner === AI && toR === ROWS - 1) {
+piece.isKing = true;
+wasPromoted = true;
+}
+boardEl.removeChild(cloneEl);
+renderBoard();
+isAnimating = false;
+if (isCapture && !wasPromoted && getCapturesForPiece(board, toR, toC, piece.owner, piece.isKing).length > 0) {
+selectedPiece = {
+r: toR,
+c: toC
+};
+pendingMultiJump = {
+fromR: toR,
+fromC: toC
+};
+mustCapture = true;
+renderBoard();
+if (currentPlayer === AI) {
+setTimeout(() => makeAIMove(), 500);
+}
+} else {
+endTurn();
+}
+}
+function handleCellClick(r, c) {
+if (gameOver || isAITurn || isAnimating) return;
+const piece = board[r][c];
+if (selectedPiece) {
+const moves = getValidMovesForSelectedPiece(selectedPiece.r, selectedPiece.c);
+const move = moves.find(m => m.toR === r && m.toC === c);
+if (move) {
+animateAndExecuteMove(move);
+return;
+}
+if (piece && piece.owner === currentPlayer && !pendingMultiJump) {
+const newPieceMoves = getValidMovesForSelectedPiece(r, c);
+if (newPieceMoves.length > 0) {
+selectedPiece = {
+r,
+c
+};
+renderBoard();
+} else {
+if (mustCapture) {
+const pieceEl = boardEl.querySelector(`[data-r="${r}"][data-c="${c}"] .piece`);
+if (pieceEl) {
+pieceEl.classList.add('shake');
+setTimeout(() => pieceEl.classList.remove('shake'), 400);
+playSoundError();
+updateStatus("Mandatory Capture! You must jump.");
+}
+}
+selectedPiece = null;
+renderBoard();
+}
+return;
+}
+selectedPiece = null;
+renderBoard();
+} else if (piece && piece.owner === currentPlayer && !pendingMultiJump) {
+const moves = getValidMovesForSelectedPiece(r, c);
+if (moves.length > 0) {
+selectedPiece = {
+r,
+c
+};
+renderBoard();
+} else {
+if (mustCapture) {
+const pieceEl = boardEl.querySelector(`[data-r="${r}"][data-c="${c}"] .piece`);
+if (pieceEl) {
+pieceEl.classList.add('shake');
+setTimeout(() => pieceEl.classList.remove('shake'), 400);
+playSoundError();
+updateStatus("Mandatory Capture! You must jump.");
+}
+}
+}
+}
+}
+async function makeAIMove() {
+if (gameOver || isAnimating) {
+return;
+}
+const allPossibleMoves = getAllMovesForPlayer(board, currentPlayer);
+if (allPossibleMoves.length === 0) {
+endTurn();
+return;
+}
+let movesToEvaluate = allPossibleMoves;
+if (pendingMultiJump) {
+movesToEvaluate = allPossibleMoves.filter(m =>
+m.fromR === pendingMultiJump.fromR && m.fromC === pendingMultiJump.fromC
+);
+}
+const shouldBlunder = (aiDepth === 1 && !mustCapture && Math.random() < 0.3);
+if (shouldBlunder && !pendingMultiJump) {
+const randomMove = movesToEvaluate[Math.floor(Math.random() * movesToEvaluate.length)];
+await animateAndExecuteMove(randomMove);
+return;
+}
+let bestMove = null;
+let bestScore = -Infinity;
+for (const move of movesToEvaluate) {
+const result = minimax(board, aiDepth - 1, -Infinity, Infinity, currentPlayer, move);
+const scoreWithJitter = result.score + Math.random() * 0.5;
+if (scoreWithJitter > bestScore) {
+bestScore = scoreWithJitter;
+bestMove = move;
+}
+}
+if (bestMove) {
+await animateAndExecuteMove(bestMove);
+} else {
+endTurn();
+}
+}
+function minimax(boardState, depth, alpha, beta, player, move) {
+let simulatedBoard = deepCopyBoard(boardState);
+const {
+fromR,
+fromC,
+toR,
+toC,
+isCapture,
+capturedR,
+capturedC
+} = move;
+const piece = simulatedBoard[fromR][fromC];
+if (!piece) {
+return {
+score: player === AI ? -Infinity : Infinity
+};
+}
+simulatedBoard[toR][toC] = piece;
+simulatedBoard[fromR][fromC] = EMPTY;
+if (isCapture) {
+simulatedBoard[capturedR][capturedC] = EMPTY;
+}
+let wasPromoted = false;
+if (piece.owner === PLAYER && toR === 0) {
+piece.isKing = true;
+wasPromoted = true;
+} else if (piece.owner === AI && toR === ROWS - 1) {
+piece.isKing = true;
+wasPromoted = true;
+}
+let isMultiJumpContinuation = false;
+if (isCapture && !wasPromoted) {
+if (getCapturesForPiece(simulatedBoard, toR, toC, player, piece.isKing).length > 0) {
+isMultiJumpContinuation = true;
+}
+}
+const nextPlayer = isMultiJumpContinuation ? player : (player === PLAYER ? AI : PLAYER);
+const winner = getWinnerInTerminalState(simulatedBoard, nextPlayer);
+if (winner !== null) {
+return {
+score: winner === AI ? 10000 + depth : -10000 - depth
+};
+}
+if (depth <= 0 && !isMultiJumpContinuation) {
+return {
+score: evaluateBoard(simulatedBoard)
+};
+}
+const moves = isMultiJumpContinuation ?
+getCapturesForPiece(simulatedBoard, toR, toC, player, piece.isKing) :
+getAllMovesForPlayer(simulatedBoard, nextPlayer);
+if (moves.length === 0) {
+return {
+score: nextPlayer === AI ? -10000 - depth : 10000 + depth
+};
+}
+const newDepth = isMultiJumpContinuation ? depth : depth - 1;
+if (nextPlayer === AI) {
+let maxEval = -Infinity;
+for (const nextMove of moves) {
+const evalResult = minimax(simulatedBoard, newDepth, alpha, beta, AI, nextMove);
+maxEval = Math.max(maxEval, evalResult.score);
+alpha = Math.max(alpha, evalResult.score);
+if (beta <= alpha) break;
+}
+return {
+score: maxEval
+};
+} else {
+let minEval = Infinity;
+for (const nextMove of moves) {
+const evalResult = minimax(simulatedBoard, newDepth, alpha, beta, PLAYER, nextMove);
+minEval = Math.min(minEval, evalResult.score);
+beta = Math.min(beta, evalResult.score);
+if (beta <= alpha) break;
+}
+return {
+score: minEval
+};
+}
+}
+function evaluateBoard(currentBoard) {
+let score = 0;
+for (let r = 0; r < ROWS; r++) {
+for (let c = 0; c < COLS; c++) {
+const piece = currentBoard[r][c];
+if (piece) {
+let value = 10;
+if (piece.isKing) value = 25;
+if (piece.owner === AI) {
+score += value;
+score += r * 1;
+} else {
+score -= value;
+score -= (ROWS - 1 - r) * 1;
+}
+}
+}
+}
+return score;
+}
+function renderBoard() {
+boardEl.innerHTML = '';
+for (let r = 0; r < ROWS; r++) {
+const rowEl = document.createElement('div');
+rowEl.className = 'row';
+for (let c = 0; c < COLS; c++) {
+const cellEl = document.createElement('div');
+const isDark = (r + c) % 2 !== 0;
+cellEl.className = `cell ${isDark ? 'dark' : 'light'}`;
+cellEl.dataset.r = r;
+cellEl.dataset.c = c;
+const pieceData = board[r][c];
+if (pieceData !== EMPTY) {
+const pieceEl = document.createElement('div');
+pieceEl.className = `piece ${pieceData.owner === PLAYER ? 'player-piece' : 'ai-piece'}`;
+if (pieceData.isKing) {
+pieceEl.classList.add('king');
+}
+if (selectedPiece && selectedPiece.r === r && selectedPiece.c === c) {
+pieceEl.classList.add('selected');
+}
+if (mustCapture && pieceData.owner === PLAYER) {
+const moves = getCapturesForPiece(board, r, c, pieceData.owner, pieceData.isKing);
+if (moves.length > 0) {
+if (!pendingMultiJump || (pendingMultiJump.fromR === r && pendingMultiJump.fromC === c)) {
+pieceEl.classList.add('must-capture');
+}
+}
+}
+cellEl.appendChild(pieceEl);
+}
+if (selectedPiece) {
+const validMoves = getValidMovesForSelectedPiece(selectedPiece.r, selectedPiece.c);
+const targetMove = validMoves.find(m => m.toR === r && m.toC === c);
+if (targetMove) {
+cellEl.classList.add('highlighted');
+}
+}
+cellEl.addEventListener('click', () => handleCellClick(r, c));
+rowEl.appendChild(cellEl);
+}
+boardEl.appendChild(rowEl);
+}
+}
+difficultySelect.addEventListener('change', (e) => {
+aiDepth = parseInt(e.target.value);
+const diffLabels = {
+1: "Easy",
+3: "Medium",
+5: "Hard"
+};
+const label = diffLabels[aiDepth];
+updateStatus(`Difficulty changed to ${label}`);
+setTimeout(() => {
+if (!gameOver && statusEl.textContent.includes("Difficulty")) {
+updateStatus('');
+}
+}, 1500);
+});
+resetButton.addEventListener('click', () => {
+initializeBoard();
+});
+howToPlayButton.addEventListener('click', showModal);
+modalCloseBtn.addEventListener('click', hideModal);
+modalOverlay.addEventListener('click', (e) => {
+if (e.target === modalOverlay) {
+hideModal();
+}
+});
+window.onload = () => {
+setupAudio();
+initializeBoard();
+};
+</script>
+</body>
+</html>

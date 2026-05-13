@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Image Upscaler</title>
+<style>
+:root {
+--bg: #121212;
+--card: #1e1e1e;
+--text: #e0e0e0;
+--accent: #00e676;
+--accent-hover: #00c853;
+}
+body {
+background: var(--bg);
+color: var(--text);
+font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+display: flex;
+flex-direction: column;
+padding: 6px;
+margin: 0;
+height: 100vh;
+box-sizing: border-box;
+}
+.container {
+display: flex;
+gap: 12px;
+height: 100%;
+width: 100%;
+background: var(--card);
+padding: 8px;
+border-radius: 8px;
+box-sizing: border-box;
+box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+border: 1px solid #333;
+}
+.sidebar {
+flex: 0 0 240px;
+display: flex;
+flex-direction: column;
+gap: 10px;
+overflow-y: auto;
+}
+h1 {
+text-align: center;
+margin: 0 0 4px 0;
+font-size: 1.2rem;
+font-weight: 600;
+}
+.upload-area {
+border: 1px dashed #555;
+padding: 12px 8px;
+text-align: center;
+border-radius: 6px;
+cursor: pointer;
+transition: 0.2s;
+background: #222;
+font-size: 0.85rem;
+}
+.upload-area:hover {
+border-color: var(--accent);
+background: #2a2a2a;
+}
+.controls {
+display: flex;
+flex-direction: column;
+gap: 12px;
+padding: 12px;
+background: #252525;
+border-radius: 6px;
+border: 1px solid #333;
+}
+.control-group {
+display: flex;
+flex-direction: column;
+gap: 2px;
+}
+label {
+font-weight: 500;
+font-size: 0.8rem;
+color: #bbb;
+display: flex;
+justify-content: space-between;
+}
+input[type="range"] {
+width: 100%;
+cursor: pointer;
+accent-color: var(--accent);
+margin: 4px 0 0 0;
+}
+.buttons {
+display: flex;
+flex-direction: column;
+gap: 8px;
+}
+.btn {
+padding: 10px;
+border: none;
+border-radius: 4px;
+font-weight: 600;
+font-size: 0.9rem;
+cursor: pointer;
+transition: all 0.2s ease;
+text-decoration: none;
+text-align: center;
+width: 100%;
+box-sizing: border-box;
+}
+.btn-primary { background: var(--accent); color: #000; }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-primary:disabled { background: #444; color: #777; cursor: not-allowed; }
+.btn-success { background: #198754; color: white; display: none; }
+.btn-success:hover { background: #157347; }
+select {
+padding: 6px;
+background: #333;
+color: white;
+border: 1px solid #555;
+border-radius: 4px;
+font-size: 0.9rem;
+width: 100%;
+}
+.preview-panel {
+flex: 1;
+display: flex;
+flex-direction: column;
+min-width: 0;
+}
+.preview-controls {
+display: flex;
+justify-content: space-between;
+align-items: center;
+margin-bottom: 8px;
+}
+.status {
+color: #888;
+font-family: monospace;
+font-size: 0.85rem;
+white-space: nowrap;
+overflow: hidden;
+text-overflow: ellipsis;
+}
+.canvas-wrapper {
+flex: 1;
+overflow: auto;
+border: 1px solid #333;
+background: #000;
+position: relative;
+display: flex;
+align-items: flex-start;
+justify-content: center;
+}
+.canvas-wrapper.fit-to-screen {
+overflow: hidden;
+}
+.canvas-wrapper.fit-to-screen canvas {
+max-width: 100%;
+max-height: 100%;
+width: auto !important;
+height: auto !important;
+object-fit: contain;
+}
+canvas {
+max-width: none;
+display: block;
+box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+}
+#jh-copyright-vertical {
+position: fixed; bottom: 6px; left: 6px; z-index: 9999; color: rgba(255,255,255,0.3); font-family: sans-serif; font-size: 10px; pointer-events: none;
+}
+</style>
+</head>
+<body>
+<div id="jh-copyright-vertical">&copy; Johnny Heggelund</div>
+<div class="container">
+<div class="sidebar">
+<h1>Upscaler</h1>
+<div class="upload-area" onclick="document.getElementById('fileIn').click()" id="dropZone">
+<p style="margin: 0;"><strong>Browse</strong> or Drag & Drop</p>
+<input type="file" id="fileIn" accept="image/*" style="display:none">
+</div>
+<div class="controls">
+<div class="control-group">
+<label>1. Sharpen <span id="sharpVal">0.8</span></label>
+<input type="range" id="sharpRange" min="0" max="3" value="0.8" step="0.1">
+</div>
+<div class="control-group">
+<label>2. Blur Radius <span id="blurVal">15px</span></label>
+<input type="range" id="blurRange" min="0" max="40" value="15" step="1">
+</div>
+<div class="control-group">
+<label>3. Soft Opacity <span id="opacityVal">40%</span></label>
+<input type="range" id="opacityRange" min="0" max="100" value="40" step="5">
+</div>
+<div class="control-group">
+<label>4. Contrast <span id="contrastVal">110%</span></label>
+<input type="range" id="contrastRange" min="100" max="200" value="110" step="5">
+</div>
+<div class="control-group">
+<label>5. Scale</label>
+<select id="scaleSelect">
+<option value="2">2x Upscale</option>
+<option value="3">3x Upscale</option>
+<option value="4">4x Upscale</option>
+</select>
+</div>
+</div>
+<div class="buttons">
+<button id="processBtn" class="btn btn-primary" disabled>Process Image</button>
+<a id="downloadLink" class="btn btn-success">Download Image</a>
+</div>
+</div>
+<div class="preview-panel">
+<div class="preview-controls">
+<div class="status" id="status">Waiting for image...</div>
+<button id="fitScreenBtn" class="btn btn-primary" style="width: auto; padding: 4px 12px; font-size: 0.8rem;">Fit to Screen</button>
+</div>
+<div class="canvas-wrapper" id="canvasWrapper">
+<canvas id="canvas"></canvas>
+</div>
+</div>
+</div>
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const fileIn = document.getElementById('fileIn');
+const dropZone = document.getElementById('dropZone');
+const processBtn = document.getElementById('processBtn');
+const downloadLink = document.getElementById('downloadLink');
+const status = document.getElementById('status');
+const canvasWrapper = document.getElementById('canvasWrapper');
+const fitScreenBtn = document.getElementById('fitScreenBtn');
+const els = {
+sharp: document.getElementById('sharpRange'),
+blur: document.getElementById('blurRange'),
+opacity: document.getElementById('opacityRange'),
+contrast: document.getElementById('contrastRange'),
+scale: document.getElementById('scaleSelect')
+};
+let originalImg = new Image();
+let originalFileName = "image";
+let isLoaded = false;
+let isFitToScreen = false;
+els.sharp.oninput = (e) => document.getElementById('sharpVal').innerText = e.target.value;
+els.blur.oninput = (e) => document.getElementById('blurVal').innerText = e.target.value + 'px';
+els.opacity.oninput = (e) => document.getElementById('opacityVal').innerText = e.target.value + '%';
+els.contrast.oninput = (e) => document.getElementById('contrastVal').innerText = e.target.value + '%';
+fitScreenBtn.addEventListener('click', () => {
+isFitToScreen = !isFitToScreen;
+canvasWrapper.classList.toggle('fit-to-screen', isFitToScreen);
+fitScreenBtn.textContent = isFitToScreen ? 'Show Actual Size' : 'Fit to Screen';
+});
+function handleFile(file) {
+if (!file) return;
+originalFileName = file.name.split('.').slice(0, -1).join('.');
+const reader = new FileReader();
+reader.onload = (e) => {
+originalImg.onload = () => {
+canvas.width = originalImg.width;
+canvas.height = originalImg.height;
+ctx.drawImage(originalImg, 0, 0);
+isLoaded = true;
+processBtn.disabled = false;
+status.innerText = `Loaded: ${originalImg.width}x${originalImg.height}px`;
+downloadLink.style.display = 'none';
+if (isFitToScreen) fitScreenBtn.click();
+}
+originalImg.src = e.target.result;
+};
+reader.readAsDataURL(file);
+}
+fileIn.addEventListener('change', e => handleFile(e.target.files[0]));
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.borderColor = '#00e676'; });
+dropZone.addEventListener('dragleave', e => { e.preventDefault(); dropZone.style.borderColor = '#555'; });
+dropZone.addEventListener('drop', e => {
+e.preventDefault();
+dropZone.style.borderColor = '#555';
+handleFile(e.dataTransfer.files[0]);
+});
+processBtn.addEventListener('click', async () => {
+if (!isLoaded) return;
+status.innerText = "Processing... (High-Quality Native Upscale)";
+processBtn.disabled = true;
+downloadLink.style.display = 'none';
+await new Promise(r => setTimeout(r, 50));
+try {
+const scale = parseInt(els.scale.value);
+const sharpAmt = parseFloat(els.sharp.value);
+const blurRadius = parseInt(els.blur.value);
+const layerOpacity = parseInt(els.opacity.value) / 100;
+const contrastVal = parseInt(els.contrast.value);
+const targetW = Math.round(originalImg.width * scale);
+const targetH = Math.round(originalImg.height * scale);
+const bufferCanvas = document.createElement('canvas');
+bufferCanvas.width = targetW;
+bufferCanvas.height = targetH;
+const bCtx = bufferCanvas.getContext('2d', { willReadFrequently: true });
+bCtx.imageSmoothingEnabled = true;
+bCtx.imageSmoothingQuality = 'high';
+let bitmap;
+try {
+bitmap = await createImageBitmap(originalImg, {
+resizeWidth: targetW,
+resizeHeight: targetH,
+resizeQuality: 'high'
+});
+bCtx.drawImage(bitmap, 0, 0);
+} catch (err) {
+bCtx.drawImage(originalImg, 0, 0, targetW, targetH);
+}
+if (sharpAmt > 0) {
+const imgData = bCtx.getImageData(0, 0, targetW, targetH);
+const sharpenedData = applySharpenKernel(imgData, targetW, targetH, sharpAmt);
+bCtx.putImageData(sharpenedData, 0, 0);
+}
+bCtx.save();
+bCtx.globalAlpha = layerOpacity;
+bCtx.filter = `blur(${blurRadius}px)`;
+if (bitmap) bCtx.drawImage(bitmap, 0, 0);
+else bCtx.drawImage(originalImg, 0, 0, targetW, targetH);
+bCtx.restore();
+canvas.width = targetW;
+canvas.height = targetH;
+ctx.filter = `contrast(${contrastVal}%)`;
+ctx.drawImage(bufferCanvas, 0, 0);
+ctx.filter = 'none';
+downloadLink.href = canvas.toDataURL("image/png");
+downloadLink.download = `${originalFileName}_Upscaled_x${scale}.png`;
+downloadLink.style.display = "block";
+status.innerText = `✅ Done! (${targetW}x${targetH}px)`;
+} catch (error) {
+console.error(error);
+status.innerText = "❌ Error processing image.";
+} finally {
+processBtn.disabled = false;
+}
+});
+function applySharpenKernel(imgData, w, h, amount) {
+const src = imgData.data;
+const output = new ImageData(w, h);
+const dst = output.data;
+dst.set(src);
+const amountAdjusted = amount / 2;
+const w4 = w * 4;
+for (let y = 1; y < h - 1; y++) {
+let idx = (y * w + 1) * 4;
+for (let x = 1; x < w - 1; x++) {
+for (let c = 0; c < 3; c++) {
+const val = src[idx + c];
+const edge = (8 * val)
+- src[idx - w4 - 4 + c] - src[idx - w4 + c] - src[idx - w4 + 4 + c]
+- src[idx - 4 + c]                          - src[idx + 4 + c]
+- src[idx + w4 - 4 + c] - src[idx + w4 + c] - src[idx + w4 + 4 + c];
+dst[idx + c] = val + (edge * amountAdjusted);
+}
+idx += 4;
+}
+}
+return output;
+}
+</script>
+</body>
+</html>

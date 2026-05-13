@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deep Sea Salvage</title>
+<style>
+body {
+margin: 0;
+padding: 0;
+background: #000000;
+color: #ffffff;
+font-family: 'Courier New', Courier, monospace;
+overflow: hidden;
+user-select: none;
+}
+canvas {
+display: block;
+}
+.ui {
+position: absolute;
+top: 0;
+left: 0;
+width: 100%;
+height: 100%;
+display: flex;
+flex-direction: column;
+justify-content: center;
+align-items: center;
+background: rgba(0,0,0,0.85);
+z-index: 10;
+}
+.hidden {
+display: none !important;
+}
+h1 {
+color: #00ffff;
+font-size: 3rem;
+text-shadow: 0 0 10px #00ffff;
+margin: 0 0 10px 0;
+text-align: center;
+}
+p {
+margin: 5px 0;
+font-size: 1.2rem;
+text-align: center;
+}
+button {
+margin-top: 30px;
+padding: 15px 30px;
+font-family: inherit;
+font-size: 1.5rem;
+font-weight: bold;
+background: #000000;
+color: #00ff00;
+border: 2px solid #00ff00;
+cursor: pointer;
+text-shadow: 0 0 5px #00ff00;
+box-shadow: 0 0 10px #00ff00;
+transition: all 0.2s;
+}
+button:hover {
+background: #00ff00;
+color: #000000;
+text-shadow: none;
+}
+#hud {
+position: absolute;
+top: 15px;
+left: 15px;
+z-index: 5;
+font-size: 1.5rem;
+pointer-events: none;
+}
+#hud div {
+margin-bottom: 5px;
+}
+</style>
+</head>
+<body>
+<div id="hud" class="hidden">
+<div>BATTERY: <span id="bat"></span></div>
+<div>STATUS: <span id="status"></span></div>
+</div>
+<div id="startScreen" class="ui">
+<h1>DEEP SEA SALVAGE</h1>
+<p>ARROWS to Thrust. Thrust consumes Battery.</p>
+<p>Descend, collect the green salvage, and return to dock.</p>
+<p>Beware of currents, mines, and red walls.</p>
+<button id="startBtn">DIVE</button>
+</div>
+<div id="gameOverScreen" class="ui hidden">
+<h1 id="goTitle">SYSTEM FAILURE</h1>
+<p id="goReason"></p>
+<button id="restartBtn">REBOOT</button>
+</div>
+<canvas id="gameCanvas"></canvas>
+<script>
+let canvas, ctx, width, height;
+let state = 'START';
+let keys = {};
+let player;
+let points = [];
+let mines = [];
+let batteries = [];
+let salvage;
+let dock;
+let particles = [];
+let isLooping = false;
+const audioManager = {
+audioCtx: null,
+thrustNode: null,
+init() {
+if (!this.audioCtx) {
+this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+}
+if (this.audioCtx.state === 'suspended') {
+this.audioCtx.resume();
+}
+},
+startThrust() {
+if (!this.audioCtx || this.thrustNode) return;
+const noiseSource = this.audioCtx.createBufferSource();
+const bufferSize = this.audioCtx.sampleRate * 2;
+const buffer = this.audioCtx.createBuffer(1, bufferSize, this.audioCtx.sampleRate);
+const output = buffer.getChannelData(0);
+for (let i = 0; i < bufferSize; i++) {
+output[i] = Math.random() * 2 - 1;
+}
+noiseSource.buffer = buffer;
+noiseSource.loop = true;
+const filter = this.audioCtx.createBiquadFilter();
+filter.type = 'lowpass';
+filter.frequency.value = 400;
+filter.Q.value = 10;
+const gainNode = this.audioCtx.createGain();
+gainNode.gain.setValueAtTime(0, this.audioCtx.currentTime);
+gainNode.gain.linearRampToValueAtTime(0.4, this.audioCtx.currentTime + 0.1);
+noiseSource.connect(filter).connect(gainNode).connect(this.audioCtx.destination);
+noiseSource.start();
+this.thrustNode = { noiseSource, gainNode };
+},
+stopThrust() {
+if (!this.thrustNode) return;
+this.thrustNode.gainNode.gain.linearRampToValueAtTime(0, this.audioCtx.currentTime + 0.2);
+this.thrustNode.noiseSource.stop(this.audioCtx.currentTime + 0.2);
+this.thrustNode = null;
+},
+playExplosion() {
+if (!this.audioCtx) return;
+const noiseSource = this.audioCtx.createBufferSource();
+const bufferSize = this.audioCtx.sampleRate;
+const buffer = this.audioCtx.createBuffer(1, bufferSize, this.audioCtx.sampleRate);
+const output = buffer.getChannelData(0);
+for (let i = 0; i < bufferSize; i++) {
+output[i] = Math.random() * 2 - 1;
+}
+noiseSource.buffer = buffer;
+const filter = this.audioCtx.createBiquadFilter();
+filter.type = 'lowpass';
+filter.frequency.value = 200;
+const gainNode = this.audioCtx.createGain();
+gainNode.gain.setValueAtTime(0.8, this.audioCtx.currentTime);
+gainNode.gain.exponentialRampToValueAtTime(0.001, this.audioCtx.currentTime + 1.5);
+noiseSource.connect(filter).connect(gainNode).connect(this.audioCtx.destination);
+noiseSource.start();
+},
+playPickup() {
+if (!this.audioCtx) return;
+const osc = this.audioCtx.createOscillator();
+const gain = this.audioCtx.createGain();
+osc.type = 'sine';
+osc.frequency.setValueAtTime(600, this.audioCtx.currentTime);
+osc.frequency.linearRampToValueAtTime(1200, this.audioCtx.currentTime + 0.1);
+gain.gain.setValueAtTime(0.3, this.audioCtx.currentTime);
+gain.gain.exponentialRampToValueAtTime(0.001, this.audioCtx.currentTime + 0.3);
+osc.connect(gain).connect(this.audioCtx.destination);
+osc.start();
+osc.stop(this.audioCtx.currentTime + 0.3);
+},
+playWin() {
+if (!this.audioCtx) return;
+const osc = this.audioCtx.createOscillator();
+const gain = this.audioCtx.createGain();
+osc.type = 'square';
+osc.frequency.setValueAtTime(400, this.audioCtx.currentTime);
+osc.frequency.linearRampToValueAtTime(800, this.audioCtx.currentTime + 0.3);
+gain.gain.setValueAtTime(0.3, this.audioCtx.currentTime);
+gain.gain.exponentialRampToValueAtTime(0.001, this.audioCtx.currentTime + 0.6);
+osc.connect(gain).connect(this.audioCtx.destination);
+osc.start();
+osc.stop(this.audioCtx.currentTime + 0.6);
+}
+};
+function resize() {
+width = window.innerWidth;
+height = window.innerHeight;
+canvas.width = width;
+canvas.height = height;
+}
+function handleKeyDown(e) {
+keys[e.code] = true;
+if (e.code === 'ArrowUp' && state === 'PLAYING') {
+audioManager.startThrust();
+}
+}
+function handleKeyUp(e) {
+keys[e.code] = false;
+if (e.code === 'ArrowUp') {
+audioManager.stopThrust();
+}
+}
+function spawnParticles(x, y, color, count, speed) {
+for (let i = 0; i < count; i++) {
+particles.push({
+x: x,
+y: y,
+vx: (Math.random() - 0.5) * speed,
+vy: (Math.random() - 0.5) * speed,
+life: 1.0,
+c: color
+});
+}
+}
+function updateDrawParticles() {
+for (let i = particles.length - 1; i >= 0; i--) {
+let p = particles[i];
+p.x += p.vx;
+p.y += p.vy;
+p.life -= 0.02;
+if (p.life <= 0) {
+particles.splice(i, 1);
+} else {
+ctx.strokeStyle = p.c;
+ctx.globalAlpha = Math.max(0, p.life);
+ctx.beginPath();
+ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+ctx.stroke();
+ctx.globalAlpha = 1.0;
+}
+}
+}
+function generateCave() {
+points = [];
+mines = [];
+batteries = [];
+let cx = width / 2;
+let cw = width * 0.6;
+for (let y = -200; y <= 4000; y += 100) {
+if (y > 200) {
+cx += (Math.random() - 0.5) * 250;
+cw += (Math.random() - 0.5) * 80;
+cw = Math.max(160, Math.min(500, cw));
+cx = Math.max(cw / 2 + 30, Math.min(width - cw / 2 - 30, cx));
+}
+points.push({ y: y, lx: cx - cw / 2, rx: cx + cw / 2 });
+}
+for (let i = 0; i < points.length - 1; i++) {
+let p1 = points[i];
+let p2 = points[i + 1];
+if (p1.y > 600 && p1.y < 3700 && Math.random() < 0.35) {
+let midY = (p1.y + p2.y) / 2;
+let midLx = (p1.lx + p2.lx) / 2;
+let midRx = (p1.rx + p2.rx) / 2;
+let safeW = (midRx - midLx) - 80;
+if (safeW > 20) {
+let mx = midLx + 40 + Math.random() * safeW;
+let speed = (Math.random() > 0.5 ? 1 : -1) * (Math.random() * 0.6 + 0.3);
+let minX = Math.max(midLx + 20, mx - 30);
+let maxX = Math.min(midRx - 20, mx + 30);
+mines.push({ x: mx, y: midY, r: 8, vx: speed, minX: minX, maxX: maxX });
+}
+} else if (p1.y > 400 && p1.y < 3800 && Math.random() < 0.2) {
+let midY = (p1.y + p2.y) / 2;
+let midLx = (p1.lx + p2.lx) / 2;
+let midRx = (p1.rx + p2.rx) / 2;
+let safeW = (midRx - midLx) - 60;
+if (safeW > 20) {
+let bx = midLx + 30 + Math.random() * safeW;
+batteries.push({ x: bx, y: midY, r: 10, collected: false });
+}
+}
+}
+dock = { x: width / 2, y: -20, w: 120, h: 40 };
+let lastP = points[points.length - 2];
+salvage = { x: (lastP.lx + lastP.rx) / 2, y: 3900, r: 15, collected: false };
+}
+function drawCave() {
+ctx.strokeStyle = '#ff0000';
+ctx.lineWidth = 2;
+ctx.beginPath();
+for (let i = 0; i < points.length; i++) {
+let p = points[i];
+if (i === 0) ctx.moveTo(p.lx, p.y);
+else ctx.lineTo(p.lx, p.y);
+}
+ctx.stroke();
+ctx.beginPath();
+for (let i = 0; i < points.length; i++) {
+let p = points[i];
+if (i === 0) ctx.moveTo(p.rx, p.y);
+else ctx.lineTo(p.rx, p.y);
+}
+ctx.stroke();
+}
+function drawMines() {
+ctx.strokeStyle = '#ff0000';
+ctx.lineWidth = 2;
+for (let i = 0; i < mines.length; i++) {
+let m = mines[i];
+ctx.beginPath();
+ctx.arc(m.x, m.y, m.r, 0, Math.PI * 2);
+ctx.stroke();
+ctx.beginPath();
+ctx.moveTo(m.x - m.r - 4, m.y);
+ctx.lineTo(m.x + m.r + 4, m.y);
+ctx.moveTo(m.x, m.y - m.r - 4);
+ctx.lineTo(m.x, m.y + m.r + 4);
+ctx.stroke();
+}
+}
+function drawBatteries() {
+ctx.strokeStyle = '#ffff00';
+ctx.lineWidth = 2;
+for (let i = 0; i < batteries.length; i++) {
+let b = batteries[i];
+if (b.collected) continue;
+ctx.beginPath();
+ctx.rect(b.x - b.r, b.y - b.r, b.r * 2, b.r * 2);
+ctx.stroke();
+ctx.beginPath();
+ctx.moveTo(b.x - b.r / 2, b.y);
+ctx.lineTo(b.x + b.r / 2, b.y);
+ctx.moveTo(b.x, b.y - b.r / 2);
+ctx.lineTo(b.x, b.y + b.r / 2);
+ctx.stroke();
+}
+}
+function drawDock() {
+ctx.strokeStyle = '#00ffff';
+ctx.lineWidth = 2;
+ctx.beginPath();
+ctx.rect(dock.x - dock.w / 2, dock.y, dock.w, dock.h);
+ctx.stroke();
+ctx.beginPath();
+ctx.moveTo(dock.x - dock.w / 2 + 10, dock.y + dock.h);
+ctx.lineTo(dock.x - dock.w / 2 + 10, dock.y + dock.h + 20);
+ctx.moveTo(dock.x + dock.w / 2 - 10, dock.y + dock.h);
+ctx.lineTo(dock.x + dock.w / 2 - 10, dock.y + dock.h + 20);
+ctx.stroke();
+}
+function drawSalvage() {
+if (salvage.collected) return;
+ctx.strokeStyle = '#00ff00';
+ctx.lineWidth = 2;
+ctx.beginPath();
+ctx.moveTo(salvage.x, salvage.y - salvage.r);
+ctx.lineTo(salvage.x + salvage.r, salvage.y);
+ctx.lineTo(salvage.x, salvage.y + salvage.r);
+ctx.lineTo(salvage.x - salvage.r, salvage.y);
+ctx.closePath();
+ctx.stroke();
+ctx.beginPath();
+ctx.arc(salvage.x, salvage.y, salvage.r / 2, 0, Math.PI * 2);
+ctx.stroke();
+}
+function drawSub() {
+ctx.strokeStyle = '#00ffff';
+ctx.lineWidth = 2;
+ctx.beginPath();
+ctx.arc(player.x, player.y, player.r, 0, Math.PI * 2);
+ctx.stroke();
+ctx.beginPath();
+ctx.moveTo(player.x - 5, player.y - player.r);
+ctx.lineTo(player.x - 5, player.y - player.r - 5);
+ctx.lineTo(player.x + 5, player.y - player.r - 5);
+ctx.lineTo(player.x + 5, player.y - player.r);
+ctx.stroke();
+if (player.hasSalvage) {
+ctx.strokeStyle = '#00ff00';
+ctx.beginPath();
+ctx.arc(player.x, player.y + player.r + 8, 5, 0, Math.PI * 2);
+ctx.stroke();
+}
+}
+function circleLine(cx, cy, r, x1, y1, x2, y2) {
+let dx = x2 - x1;
+let dy = y2 - y1;
+let lenSq = dx * dx + dy * dy;
+let t = ((cx - x1) * dx + (cy - y1) * dy) / lenSq;
+t = Math.max(0, Math.min(1, t));
+let closestX = x1 + t * dx;
+let closestY = y1 + t * dy;
+let distX = cx - closestX;
+let distY = cy - closestY;
+return (distX * distX + distY * distY) <= (r * r);
+}
+function triggerGameOver(reason) {
+state = 'GAMEOVER';
+audioManager.stopThrust();
+audioManager.playExplosion();
+spawnParticles(player.x, player.y, '#00ffff', 50, 4);
+document.getElementById('hud').classList.add('hidden');
+document.getElementById('gameOverScreen').classList.remove('hidden');
+document.getElementById('goTitle').innerText = 'SYSTEM FAILURE';
+document.getElementById('goTitle').style.color = '#ff0000';
+document.getElementById('goTitle').style.textShadow = '0 0 10px #ff0000';
+document.getElementById('goReason').innerText = reason;
+}
+function triggerWin() {
+state = 'WIN';
+audioManager.stopThrust();
+audioManager.playWin();
+document.getElementById('hud').classList.add('hidden');
+document.getElementById('gameOverScreen').classList.remove('hidden');
+document.getElementById('goTitle').innerText = 'MISSION SUCCESS';
+document.getElementById('goTitle').style.color = '#00ff00';
+document.getElementById('goTitle').style.textShadow = '0 0 10px #00ff00';
+document.getElementById('goReason').innerText = 'SALVAGE SECURED';
+}
+function checkCollisions() {
+for (let i = 0; i < points.length - 1; i++) {
+let p1 = points[i];
+let p2 = points[i + 1];
+if (circleLine(player.x, player.y, player.r, p1.lx, p1.y, p2.lx, p2.y) ||
+circleLine(player.x, player.y, player.r, p1.rx, p1.y, p2.rx, p2.y)) {
+triggerGameOver('HULL BREACH');
+return;
+}
+}
+for (let i = 0; i < mines.length; i++) {
+let m = mines[i];
+let dx = player.x - m.x;
+let dy = player.y - m.y;
+if (dx * dx + dy * dy < (player.r + m.r) * (player.r + m.r)) {
+triggerGameOver('MINE DETONATION');
+return;
+}
+}
+for (let i = 0; i < batteries.length; i++) {
+let b = batteries[i];
+if (!b.collected) {
+let dx = player.x - b.x;
+let dy = player.y - b.y;
+if (dx * dx + dy * dy < (player.r + b.r) * (player.r + b.r)) {
+b.collected = true;
+player.bat = Math.min(player.maxBat, player.bat + 1500);
+audioManager.playPickup();
+spawnParticles(b.x, b.y, '#ffff00', 30, 3);
+}
+}
+}
+if (!salvage.collected) {
+let dx = player.x - salvage.x;
+let dy = player.y - salvage.y;
+if (dx * dx + dy * dy < (player.r + salvage.r) * (player.r + salvage.r)) {
+salvage.collected = true;
+player.hasSalvage = true;
+audioManager.playPickup();
+}
+}
+if (player.hasSalvage && player.y <= dock.y + dock.h + player.r + 10 && Math.abs(player.x - dock.x) < dock.w / 2) {
+triggerWin();
+}
+}
+function updateHUD() {
+let batPct = Math.max(0, Math.floor((player.bat / player.maxBat) * 100));
+document.getElementById('bat').innerText = batPct + '%';
+document.getElementById('status').innerText = player.hasSalvage ? 'RETURNING' : 'SEARCHING';
+document.getElementById('status').style.color = player.hasSalvage ? '#00ff00' : '#00ffff';
+}
+function update() {
+let gravity = player.hasSalvage ? 0.035 : 0.02;
+player.vy += gravity;
+player.bat -= 0.05;
+let currentForce = Math.sin(Date.now() / 2500) * 0.08;
+player.vx += currentForce;
+if (keys['ArrowUp']) {
+player.vy -= 0.12;
+player.bat -= 0.4;
+spawnParticles(player.x, player.y + player.r, '#00ffff', 1, 2);
+}
+if (keys['ArrowLeft']) {
+player.vx -= 0.08;
+player.bat -= 0.2;
+spawnParticles(player.x + player.r, player.y, '#00ffff', 1, 1);
+}
+if (keys['ArrowRight']) {
+player.vx += 0.08;
+player.bat -= 0.2;
+spawnParticles(player.x - player.r, player.y, '#00ffff', 1, 1);
+}
+let drag = player.hasSalvage ? 0.94 : 0.95;
+player.vx *= drag;
+player.vy *= drag;
+player.x += player.vx;
+player.y += player.vy;
+if (player.y < -150) {
+player.y = -150;
+player.vy = 0;
+}
+if (player.bat <= 0) {
+triggerGameOver('POWER DEPLETED');
+}
+for (let i = 0; i < mines.length; i++) {
+let m = mines[i];
+m.x += m.vx;
+if (m.x < m.minX || m.x > m.maxX) {
+m.vx *= -1;
+}
+}
+}
+function render() {
+ctx.fillStyle = '#000000';
+ctx.fillRect(0, 0, width, height);
+ctx.save();
+let camY = player.y - height / 2;
+ctx.translate(0, -camY);
+drawCave();
+drawMines();
+drawBatteries();
+drawDock();
+drawSalvage();
+if (state === 'PLAYING' || state === 'WIN') {
+drawSub();
+}
+updateDrawParticles();
+ctx.restore();
+}
+function loop() {
+requestAnimationFrame(loop);
+if (state === 'PLAYING') {
+update();
+checkCollisions();
+}
+render();
+if (state === 'PLAYING') {
+updateHUD();
+}
+}
+function startGame() {
+audioManager.init();
+player = { x: width / 2, y: 40, vx: 0, vy: 0, r: 10, bat: 5000, maxBat: 5000, hasSalvage: false };
+generateCave();
+particles = [];
+state = 'PLAYING';
+document.getElementById('startScreen').classList.add('hidden');
+document.getElementById('gameOverScreen').classList.add('hidden');
+document.getElementById('hud').classList.remove('hidden');
+for (let k in keys) keys[k] = false;
+if (!isLooping) {
+isLooping = true;
+requestAnimationFrame(loop);
+}
+}
+function setupCursorHiding() {
+const hideStyle = 'cursor: none !important;';
+const showStyle = 'cursor: default !important;';
+const setCursor = (style) => {
+document.documentElement.style.cssText += style;
+document.body.style.cssText += style;
+document.querySelectorAll('canvas').forEach(el => {
+el.style.cssText += style;
+});
+};
+window.addEventListener('keydown', () => setCursor(hideStyle), true);
+window.addEventListener('mousemove', () => setCursor(showStyle), true);
+}
+function init() {
+canvas = document.getElementById('gameCanvas');
+ctx = canvas.getContext('2d');
+resize();
+setupCursorHiding();
+window.addEventListener('resize', resize);
+window.addEventListener('keydown', handleKeyDown);
+window.addEventListener('keyup', handleKeyUp);
+document.getElementById('startBtn').addEventListener('click', startGame);
+document.getElementById('restartBtn').addEventListener('click', startGame);
+}
+window.onload = init;
+</script>
+</body>
+</html>

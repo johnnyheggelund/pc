@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AIcoder</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text x=%2250%22 y=%2275%22 font-size=%2280%22 text-anchor=%22middle%22>%F0%9F%A4%96</text></svg>">
+<style>
+html, body {
+margin: 0;
+padding: 0;
+background-color: #0d1117;
+height: 100vh;
+width: 100vw;
+overflow: hidden;
+font-family: sans-serif;
+}
+textarea#editor {
+width: 100vw;
+height: 100vh;
+margin: 0;
+padding: 20px;
+box-sizing: border-box;
+background-color: #0d1117;
+color: #b0b7c3;
+border: none;
+outline: none;
+resize: none;
+font-family: monospace;
+font-size: 15px;
+white-space: pre;
+overflow-wrap: normal;
+overflow-x: auto;
+overflow-y: auto;
+caret-color: #ff9900;
+}
+#toast {
+position: fixed;
+bottom: 24px;
+right: 24px;
+background: #161b22;
+color: #7eb0ff;
+padding: 8px 16px;
+border-radius: 4px;
+border: 1px solid #30363d;
+font-size: 14px;
+opacity: 0;
+transition: opacity 0.3s ease;
+pointer-events: none;
+z-index: 1000;
+}
+#unsaved-dot {
+position: fixed;
+top: 24px;
+right: 24px;
+width: 12px;
+height: 12px;
+background-color: #ff9900;
+border-radius: 50%;
+opacity: 0;
+transition: opacity 0.3s ease;
+pointer-events: none;
+z-index: 1000;
+}
+#ai-modal-overlay {
+position: fixed;
+top: 0; left: 0; width: 100vw; height: 100vh;
+background: rgba(13, 17, 23, 0.7);
+backdrop-filter: blur(2px);
+display: flex;
+justify-content: center;
+align-items: center;
+z-index: 2000;
+opacity: 0;
+pointer-events: none;
+transition: opacity 0.2s ease;
+}
+#ai-modal-overlay.active {
+opacity: 1;
+pointer-events: all;
+}
+#ai-prompt-box {
+background: #161b22;
+width: 500px;
+max-width: 90vw;
+border-radius: 8px;
+border: 1px solid #30363d;
+padding: 20px;
+box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+display: flex;
+flex-direction: column;
+gap: 12px;
+}
+.ai-header {
+display: flex;
+justify-content: space-between;
+align-items: center;
+}
+#ai-status {
+font-size: 13px;
+font-weight: bold;
+color: #8b949e;
+text-transform: uppercase;
+letter-spacing: 0.5px;
+}
+#ai-status.thinking { color: #ff9900; }
+#ai-status.finished { color: #7ee787; }
+#ai-status.error { color: #ff7b72; }
+#ai-config-btn {
+background: none;
+border: none;
+color: #7eb0ff;
+cursor: pointer;
+font-size: 16px;
+padding: 0;
+}
+textarea#ai-input {
+width: 100%;
+background: #0d1117;
+border: 1px solid #30363d;
+color: #c9d1d9;
+padding: 12px;
+resize: none;
+font-family: sans-serif;
+height: 120px;
+outline: none;
+font-size: 14px;
+line-height: 1.5;
+box-sizing: border-box;
+border-radius: 6px;
+}
+textarea#ai-input:focus { border-color: #7eb0ff; }
+textarea#ai-input:disabled { opacity: 0.5; cursor: not-allowed; }
+#ai-message-out {
+font-size: 13px;
+color: #8b949e;
+min-height: 1.5em;
+}
+.ai-hints {
+font-size: 11px;
+color: #484f58;
+text-align: center;
+margin-top: -4px;
+}
+</style>
+</head>
+<body>
+<textarea id="editor" spellcheck="false" autofocus></textarea>
+<div id="toast" class="unsearchable"></div>
+<div id="unsaved-dot"></div>
+<div id="ai-modal-overlay">
+<div id="ai-prompt-box">
+<div class="ai-header">
+<span id="ai-status">Ready</span>
+<button id="ai-config-btn" title="API Key Setup">⚙️</button>
+</div>
+<textarea id="ai-input" placeholder="What should I change in the code?" spellcheck="false"></textarea>
+<div id="ai-message-out">Press Enter to send. Esc to close.</div>
+<div class="ai-hints">Shift + Enter for new line</div>
+</div>
+</div>
+<script>
+const editor = document.getElementById('editor');
+const toast = document.getElementById('toast');
+const unsavedDot = document.getElementById('unsaved-dot');
+let fileHandle = null;
+let fallbackFileName = 'code.html';
+let toastTimeout;
+let isUnsaved = false;
+let history = [];
+let historyIndex = -1;
+let inputTimeout;
+function saveState() {
+const val = editor.value;
+const start = editor.selectionStart;
+const end = editor.selectionEnd;
+if (historyIndex >= 0 && history[historyIndex].value === val) return;
+history = history.slice(0, historyIndex + 1);
+history.push({ value: val, start: start, end: end });
+historyIndex++;
+}
+function undo() {
+if (historyIndex > 0) {
+historyIndex--;
+const state = history[historyIndex];
+editor.value = state.value;
+editor.selectionStart = state.start;
+editor.selectionEnd = state.end;
+setUnsavedState(true);
+}
+}
+function redo() {
+if (historyIndex < history.length - 1) {
+historyIndex++;
+const state = history[historyIndex];
+editor.value = state.value;
+editor.selectionStart = state.start;
+editor.selectionEnd = state.end;
+setUnsavedState(true);
+}
+}
+function showToast(message) {
+clearTimeout(toastTimeout);
+toast.textContent = message;
+toast.style.opacity = '1';
+toastTimeout = setTimeout(() => {
+toast.style.opacity = '0';
+}, 3000);
+}
+function setUnsavedState(state) {
+isUnsaved = state;
+unsavedDot.style.opacity = isUnsaved ? '1' : '0';
+}
+async function handleOpen() {
+if (isUnsaved && !confirm("You have unsaved changes. Open a new file anyway?")) return;
+const finishOpen = (text, handle, fileName) => {
+fileHandle = handle;
+fallbackFileName = fileName;
+editor.value = text;
+editor.selectionStart = editor.selectionEnd = 0;
+history = [];
+historyIndex = -1;
+editor.focus();
+setUnsavedState(false);
+saveState();
+showToast("File opened");
+};
+if (window.showOpenFilePicker) {
+try {
+const [handle] = await window.showOpenFilePicker();
+const file = await handle.getFile();
+finishOpen(await file.text(), handle, file.name);
+} catch (err) {
+if (err.name !== 'AbortError') showToast("Failed to open file!");
+}
+} else {
+const input = document.createElement('input');
+input.type = 'file';
+input.accept = 'text/*, .html, .js, .css, .json, .txt';
+input.onchange = async (e) => {
+const file = e.target.files[0];
+if (file) {
+finishOpen(await file.text(), null, file.name);
+}
+};
+input.click();
+}
+}
+async function handleSave() {
+if (window.showSaveFilePicker) {
+try {
+if (!fileHandle) {
+fileHandle = await window.showSaveFilePicker({
+suggestedName: fallbackFileName,
+types: [{ description: 'Text Files', accept: { 'text/html': ['.html'], 'text/javascript': ['.js'], 'text/css': ['.css'], 'text/plain': ['.txt'] } }]
+});
+}
+const writable = await fileHandle.createWritable();
+await writable.write(editor.value);
+await writable.close();
+fallbackFileName = fileHandle.name;
+setUnsavedState(false);
+showToast("File saved");
+} catch (err) {
+if (err.name !== 'AbortError') showToast("Failed to save file!");
+}
+} else {
+try {
+const blob = new Blob([editor.value], { type: 'text/plain' });
+const url = URL.createObjectURL(blob);
+const a = document.createElement('a');
+a.href = url;
+a.download = fallbackFileName;
+document.body.appendChild(a);
+a.click();
+document.body.removeChild(a);
+URL.revokeObjectURL(url);
+setUnsavedState(false);
+showToast("File downloaded");
+} catch (err) {
+showToast("Failed to save file!");
+}
+}
+}
+function handlePreview() {
+const win = window.open('about:blank', '_blank');
+if (win) { win.document.open(); win.document.write(editor.value); win.document.close(); }
+else { showToast("Preview blocked!"); }
+}
+function runCleanup() {
+const originalText = editor.value;
+const lines = originalText.split('\n');
+const getPos = (index) => {
+const textBefore = originalText.substring(0, index);
+const linesBefore = textBefore.split('\n');
+return { line: linesBefore.length - 1, col: linesBefore.pop().length };
+};
+const startPos = getPos(editor.selectionStart);
+const endPos = getPos(editor.selectionEnd);
+let newStartLine = 0, newStartCol = 0;
+let newEndLine = 0, newEndCol = 0;
+const ext = fallbackFileName ? fallbackFileName.split('.').pop().toLowerCase() : 'html';
+const isHtml = ext === 'html' || ext === 'htm';
+const isJs = ['js', 'mjs', 'json', 'ts'].includes(ext);
+const isCss = ext === 'css';
+let state = {
+inScript: isJs,
+inStyle: isCss,
+inBacktick: false,
+inBlockComm: false,
+inHtmlComm: false
+};
+let lastRealChar = '';
+let lastWord = '';
+let currentWord = '';
+let commentCount = 0;
+let whitespaceCount = 0;
+let emptyLinesCount = 0;
+const newLines = [];
+const isEscaped = (lineStr, idx) => {
+let count = 0;
+let i = idx - 1;
+while (i >= 0 && lineStr[i] === '\\') { count++; i--; }
+return count % 2 !== 0;
+};
+for (let i = 0; i < lines.length; i++) {
+const line = lines[i];
+const lowerLine = line.toLowerCase();
+let builtLine = "";
+if (isHtml && !state.inBacktick && !state.inBlockComm && !state.inHtmlComm) {
+if (lowerLine.includes('<' + 'script')) { state.inScript = true; lastRealChar = '{'; }
+if (lowerLine.includes('<' + 'style')) state.inStyle = true;
+}
+let inString = false;
+let quoteChar = '';
+let inRegex = false;
+for (let j = 0; j < line.length; j++) {
+const char = line[j];
+const nextChar = line[j + 1];
+if (state.inScript && !state.inBacktick && !state.inBlockComm && !state.inHtmlComm && !inString && !inRegex) {
+if (/[a-zA-Z0-9_$]/.test(char)) {
+currentWord += char;
+} else {
+if (currentWord.length > 0) lastWord = currentWord;
+currentWord = '';
+if (char.trim() !== '') lastRealChar = char;
+}
+}
+if (state.inHtmlComm) {
+if (char === '-' && nextChar === '-' && line[j + 2] === '>') {
+state.inHtmlComm = false; commentCount++; j += 2;
+}
+continue;
+}
+if (state.inBlockComm) {
+if (char === '*' && nextChar === '/') {
+state.inBlockComm = false; commentCount++; j++;
+}
+continue;
+}
+if (state.inBacktick) {
+builtLine += char;
+if (char === '`' && !isEscaped(line, j)) state.inBacktick = false;
+continue;
+}
+if (inString) {
+builtLine += char;
+if (char === quoteChar && !isEscaped(line, j)) inString = false;
+continue;
+}
+if (inRegex) {
+builtLine += char;
+if (char === '/' && !isEscaped(line, j)) inRegex = false;
+continue;
+}
+if (!state.inScript && !state.inStyle && char === '<' && nextChar === '!' && line.substr(j, 4) === '<' + '!--') {
+state.inHtmlComm = true; j += 3; continue;
+}
+if ((state.inScript || state.inStyle) && char === '/' && nextChar === '*') {
+state.inBlockComm = true; j++; continue;
+}
+if (state.inScript && char === '/' && nextChar === '/') {
+commentCount++; break;
+}
+if (state.inScript || state.inStyle) {
+if (char === '`' && !isEscaped(line, j)) {
+state.inBacktick = true; builtLine += char; continue;
+}
+if ((char === '"' || char === "'") && !isEscaped(line, j)) {
+inString = true; quoteChar = char; builtLine += char; continue;
+}
+if (state.inScript && char === '/' && !isEscaped(line, j)) {
+if (nextChar !== '/' && nextChar !== '*') {
+const isRegexChar = "/=,:[({!&|?;+-*~^%".includes(lastRealChar);
+const isRegexWord = ['return', 'case', 'throw', 'typeof', 'void', 'delete', 'await'].includes(lastWord);
+if (isRegexChar || isRegexWord) {
+inRegex = true; builtLine += char; continue;
+}
+}
+}
+}
+builtLine += char;
+}
+if (isHtml && !state.inBacktick && !state.inBlockComm && !state.inHtmlComm) {
+if (lowerLine.includes('<' + '/script>')) { state.inScript = false; lastRealChar = ''; }
+if (lowerLine.includes('<' + '/style>')) state.inStyle = false;
+}
+const trimmed = builtLine.trim();
+if (builtLine.length !== trimmed.length) whitespaceCount++;
+const isProtected = state.inBacktick;
+if (trimmed.length > 0 || isProtected) {
+newLines.push(trimmed);
+if (i === startPos.line) { newStartLine = newLines.length - 1; newStartCol = Math.min(startPos.col, trimmed.length); }
+if (i === endPos.line) { newEndLine = newLines.length - 1; newEndCol = Math.min(endPos.col, trimmed.length); }
+} else {
+emptyLinesCount++;
+if (i === startPos.line) { newStartLine = Math.max(0, newLines.length - 1); newStartCol = newLines.length > 0 ? newLines[newLines.length - 1].length : 0; }
+if (i === endPos.line) { newEndLine = Math.max(0, newLines.length - 1); newEndCol = newLines.length > 0 ? newLines[newLines.length - 1].length : 0; }
+}
+}
+const finalContent = newLines.join('\n');
+if (finalContent !== originalText) {
+saveState();
+editor.value = finalContent;
+const getAbsPos = (lineIdx, colIdx) => {
+let abs = 0;
+for (let k = 0; k < lineIdx; k++) abs += newLines[k].length + 1;
+return abs + colIdx;
+};
+editor.selectionStart = getAbsPos(newStartLine, newStartCol);
+editor.selectionEnd = Math.max(editor.selectionStart, getAbsPos(newEndLine, newEndCol));
+setUnsavedState(true);
+saveState();
+showToast(`AI Optimized: ${commentCount} comments & ${emptyLinesCount} empty lines removed. Code flush left.`);
+} else {
+showToast("Code is already fully AI optimized.");
+}
+}
+function handleInput() {
+if (!isUnsaved) setUnsavedState(true);
+clearTimeout(inputTimeout);
+inputTimeout = setTimeout(saveState, 500);
+}
+function handleKeyDown(e) {
+if (gemini.isModalOpen) return;
+if (e.ctrlKey && e.code === 'KeyZ') { e.preventDefault(); undo(); return; }
+if (e.ctrlKey && e.code === 'KeyY') { e.preventDefault(); redo(); return; }
+if (e.altKey && e.code === 'KeyO') { e.preventDefault(); handleOpen(); return; }
+if (e.altKey && e.code === 'KeyS') { e.preventDefault(); handleSave(); return; }
+if (e.altKey && e.code === 'KeyP') { e.preventDefault(); handlePreview(); return; }
+if (e.altKey && e.code === 'KeyC') { e.preventDefault(); runCleanup(); return; }
+if (e.altKey && e.code === 'KeyA') { e.preventDefault(); gemini.toggleModal(); return; }
+if (e.key === 'Tab') {
+e.preventDefault();
+saveState();
+const start = editor.selectionStart;
+const end = editor.selectionEnd;
+const value = editor.value;
+if (start === end && !e.shiftKey) {
+editor.value = value.substring(0, start) + "  " + value.substring(end);
+editor.selectionStart = editor.selectionEnd = start + 2;
+} else {
+const lineStartPos = value.lastIndexOf('\n', start - 1) + 1;
+let lineEndPos = value.indexOf('\n', end);
+if (lineEndPos === -1) lineEndPos = value.length;
+const lines = value.substring(lineStartPos, lineEndPos).split('\n');
+let firstLineLengthDiff = 0;
+let totalLengthDiff = 0;
+const newLines = lines.map((line, index) => {
+let newLine = line;
+let diff = 0;
+if (e.shiftKey) {
+if (newLine.startsWith('  ')) { newLine = newLine.substring(2); diff = -2; }
+else if (newLine.startsWith(' ') || newLine.startsWith('\t')) { newLine = newLine.substring(1); diff = -1; }
+} else { newLine = '  ' + newLine; diff = 2; }
+if (index === 0) firstLineLengthDiff = diff;
+totalLengthDiff += diff;
+return newLine;
+});
+editor.value = value.substring(0, lineStartPos) + newLines.join('\n') + value.substring(lineEndPos);
+let newStart = Math.max(lineStartPos, start + firstLineLengthDiff);
+editor.selectionStart = newStart;
+editor.selectionEnd = Math.max(newStart, end + totalLengthDiff);
+}
+setUnsavedState(true);
+saveState();
+}
+}
+window.addEventListener('keydown', handleKeyDown);
+window.addEventListener('beforeunload', (e) => { if (isUnsaved) { e.preventDefault(); e.returnValue = ''; }});
+editor.addEventListener('input', handleInput);
+saveState();
+class GeminiBrain {
+constructor() {
+this.apiKey = null;
+this.activeModel = 'gemini-2.5-pro';
+this.conversationHistory = [];
+this.isModalOpen = false;
+this.overlay = document.getElementById('ai-modal-overlay');
+this.input = document.getElementById('ai-input');
+this.statusEl = document.getElementById('ai-status');
+this.msgOut = document.getElementById('ai-message-out');
+this.configBtn = document.getElementById('ai-config-btn');
+this.configBtn.onclick = () => this.promptAPIKey();
+window.addEventListener('keydown', (e) => {
+if (e.key === 'Escape' && this.isModalOpen) {
+this.closeModal();
+}
+});
+this.input.addEventListener('keydown', (e) => {
+if (e.key === 'Enter' && !e.shiftKey) {
+e.preventDefault();
+this.sendUserMessage();
+}
+});
+this.initData();
+}
+initData() {
+const storedKey = localStorage.getItem('gemini_key_pc');
+if (storedKey && storedKey.trim().length > 5) {
+this.apiKey = storedKey;
+this.setStatus("Ready", "");
+this.detectBestModels();
+} else {
+this.setStatus("Missing API Key", "error");
+this.msgOut.textContent = "Click the gear icon to add your API key.";
+}
+}
+promptAPIKey() {
+const key = prompt("Paste your Gemini API key from Google AI Studio:", this.apiKey || "");
+if (key && key.trim()) {
+this.apiKey = key.trim();
+localStorage.setItem('gemini_key_pc', this.apiKey);
+this.detectBestModels();
+this.setStatus("Ready", "");
+this.msgOut.textContent = "API Key saved locally.";
+}
+}
+toggleModal() {
+if (this.isModalOpen) {
+this.closeModal();
+} else {
+this.openModal();
+}
+}
+openModal() {
+this.isModalOpen = true;
+this.overlay.classList.add('active');
+if (this.statusEl.textContent === 'FINISHED!' || this.statusEl.classList.contains('error')) {
+this.setStatus("Ready", "");
+this.msgOut.textContent = "Press Enter to send. Esc to close.";
+}
+setTimeout(() => this.input.focus(), 50);
+}
+closeModal() {
+this.isModalOpen = false;
+this.overlay.classList.remove('active');
+editor.focus();
+}
+setStatus(text, className) {
+this.statusEl.textContent = text;
+this.statusEl.className = className;
+}
+applyAutoUpdate(newCode) {
+editor.value = newCode;
+setUnsavedState(true);
+saveState();
+}
+async sendUserMessage() {
+const text = this.input.value.trim();
+if (!text) return;
+if (!this.apiKey) {
+this.promptAPIKey();
+return;
+}
+const currentCode = editor.value;
+this.input.value = '';
+this.input.disabled = true;
+this.setStatus("THINKING...", "thinking");
+this.msgOut.textContent = "Analyzing code and drafting changes...";
+let dotCount = 0;
+const loadingInterval = setInterval(() => {
+dotCount = (dotCount + 1) % 4;
+this.setStatus("THINKING" + ".".repeat(dotCount), "thinking");
+}, 400);
+try {
+const historyPayload = this.conversationHistory.map(entry => ({
+role: entry.role === 'ai' ? 'model' : 'user',
+parts: [{ text: entry.text }]
+}));
+const prompt = `CURRENT CODE:\n\`\`\`\n${currentCode}\n\`\`\`\n\nUSER REQUEST: ${text}`;
+const payload = {
+contents: [
+...historyPayload,
+{ role: 'user', parts: [{ text: prompt }] }
+],
+systemInstruction: {
+parts: [{
+text: `SYSTEM: You are an expert coding assistant specializing in single-file HTML/CSS/JS web apps.
+The user will communicate in English. All code, logic, variables, functions, and UI text you produce MUST be in English.
+Do NOT truncate code or use placeholders like "// rest of code" unless explicitly asked.
+
+If the user asks for a SMALL or MODERATE change, DO NOT output the whole file. Instead, use this EXACT format to search and replace parts of the code. Provide enough context in the search block so it's entirely unique:
+<<<< SEARCH
+[Exact code as it currently appears in the file. Include surrounding lines to make it unique]
+====
+[The new code to replace it with]
+>>>>
+
+If the change is MASSIVE and requires rewriting the entire logic, output the full file inside a standard markdown code block (\`\`\`).
+Always briefly explain your thought process before writing any code blocks.`
+}]
+}
+};
+const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${this.activeModel}:generateContent?key=${this.apiKey}`, {
+method: 'POST',
+mode: 'cors',
+headers: { 'Content-Type': 'application/json' },
+body: JSON.stringify(payload)
+});
+if (!response.ok) throw new Error('API Error: ' + response.statusText);
+const data = await response.json();
+const aiText = data.candidates[0].content.parts[0].text;
+clearInterval(loadingInterval);
+const searchReplaceRegex = /<<<< SEARCH\r?\n([\s\S]*?)\r?\n====\r?\n([\s\S]*?)\r?\n>>>>/g;
+let match;
+let didReplace = false;
+let tempCode = currentCode;
+let errors = [];
+while ((match = searchReplaceRegex.exec(aiText)) !== null) {
+const searchText = match[1];
+const replaceText = match[2];
+const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+let pattern = escapeRegex(searchText.trim()).replace(/\s+/g, '\\s+');
+try {
+const regex = new RegExp(pattern, 'g');
+const matches = [...tempCode.matchAll(regex)];
+if (matches.length === 1) {
+const matchStart = matches[0].index;
+const matchEnd = matchStart + matches[0][0].length;
+tempCode = tempCode.substring(0, matchStart) + replaceText + tempCode.substring(matchEnd);
+didReplace = true;
+} else if (matches.length === 0) {
+if (tempCode.includes(searchText)) {
+tempCode = tempCode.replace(searchText, replaceText);
+didReplace = true;
+} else {
+errors.push("AI could not find exact code to replace.");
+}
+} else {
+errors.push("AI found the snippet multiple times and couldn't resolve.");
+}
+} catch(e) {
+if (tempCode.includes(searchText)) {
+tempCode = tempCode.replace(searchText, replaceText);
+didReplace = true;
+} else {
+errors.push("Regex error during search/replace.");
+}
+}
+}
+const bt = '`' + '`' + '`';
+const fullCodeRegex = new RegExp(bt + '[a-zA-Z0-9_-]*\\s*([\\s\\S]*?)' + bt, 'gi');
+const blocks = [...aiText.matchAll(fullCodeRegex)];
+if (didReplace) {
+this.applyAutoUpdate(tempCode);
+} else if (blocks.length > 0 && errors.length === 0) {
+const longestBlock = blocks.reduce((a, b) => a[1].length > b[1].length ? a : b);
+this.applyAutoUpdate(longestBlock[1].trim());
+}
+this.conversationHistory.push({ role: 'user', text: text });
+let cleanAiHistoryText = aiText.replace(searchReplaceRegex, '[CODE UPDATED]').replace(fullCodeRegex, '[FILE UPDATED]').trim();
+this.conversationHistory.push({ role: 'ai', text: cleanAiHistoryText });
+if (this.conversationHistory.length > 6) {
+this.conversationHistory = this.conversationHistory.slice(-6);
+}
+if (errors.length > 0 && !didReplace && blocks.length === 0) {
+this.setStatus("ERROR", "error");
+this.msgOut.textContent = errors[0] + " Please try rephrasing.";
+} else {
+this.setStatus("FINISHED!", "finished");
+this.msgOut.textContent = "Code updated in background. Press Esc to close and test.";
+}
+} catch (e) {
+clearInterval(loadingInterval);
+this.setStatus("ERROR", "error");
+this.msgOut.textContent = e.message;
+} finally {
+this.input.disabled = false;
+this.input.focus();
+}
+}
+async detectBestModels() {
+try {
+const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${this.apiKey}`);
+const data = await response.json();
+const models = data.models
+.filter(m => m.supportedGenerationMethods.includes("generateContent") && m.name.includes("gemini"))
+.map(m => m.name.replace('models/', ''));
+const sortModels = (list) => {
+return list.sort((a, b) => {
+const getVersion = (name) => {
+const match = name.match(/gemini-(\d+(?:\.\d+)?)/i);
+return match ? parseFloat(match[1]) : 0;
+};
+const vA = getVersion(a);
+const vB = getVersion(b);
+if (vA !== vB) return vB - vA;
+const isPreview = (n) => n.toLowerCase().match(/preview|exp|experimental/);
+if (isPreview(a) && !isPreview(b)) return -1;
+if (!isPreview(a) && isPreview(b)) return 1;
+return 0;
+});
+};
+const proModels = sortModels(models.filter(m => m.toLowerCase().includes('pro')));
+if (proModels.length > 0) {
+this.activeModel = proModels[0];
+}
+} catch (e) {
+console.error("Model fetch failed", e);
+}
+}
+}
+const gemini = new GeminiBrain();
+</script>
+</body>
+</html>

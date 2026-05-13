@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Retromaker</title>
+<style>
+:root {
+--bg-color: #0b0c10;
+--sidebar-bg: #13151b;
+--text-color: #e2e8f0;
+--accent-color: #6366f1;
+--accent-hover: #4f46e5;
+--success-color: #10b981;
+--success-hover: #059669;
+--border-color: #272a35;
+--input-bg: #1c1f28;
+}
+* {
+box-sizing: border-box;
+}
+body {
+margin: 0;
+padding: 0;
+background-color: var(--bg-color);
+color: var(--text-color);
+font-family: 'Segoe UI', 'Roboto', Helvetica, Arial, sans-serif;
+height: 100vh;
+display: flex;
+overflow: hidden;
+}
+.sidebar {
+width: 340px;
+background-color: var(--sidebar-bg);
+border-right: 1px solid var(--border-color);
+display: flex;
+flex-direction: column;
+padding: 20px;
+overflow-y: auto;
+flex-shrink: 0;
+box-shadow: 2px 0 15px rgba(0, 0, 0, 0.4);
+z-index: 10;
+}
+.sidebar::-webkit-scrollbar {
+width: 6px;
+}
+.sidebar::-webkit-scrollbar-track {
+background: var(--sidebar-bg);
+}
+.sidebar::-webkit-scrollbar-thumb {
+background: var(--border-color);
+border-radius: 3px;
+}
+.sidebar h1 {
+font-size: 1.4rem;
+margin: 0;
+text-transform: uppercase;
+letter-spacing: 1.5px;
+color: #fff;
+}
+.sidebar p.subtitle {
+color: #8892b0;
+font-size: 0.8rem;
+margin: 5px 0 20px 0;
+letter-spacing: 0.5px;
+}
+.section-title {
+font-size: 0.7rem;
+text-transform: uppercase;
+letter-spacing: 1.2px;
+color: #64748b;
+margin: 25px 0 10px 0;
+padding-bottom: 5px;
+border-bottom: 1px solid var(--border-color);
+font-weight: 700;
+}
+.control-group {
+margin-bottom: 16px;
+}
+label {
+display: flex;
+justify-content: space-between;
+font-size: 0.8rem;
+font-weight: 500;
+margin-bottom: 8px;
+color: #cbd5e1;
+align-items: center;
+}
+.value-display {
+color: var(--accent-color);
+font-variant-numeric: tabular-nums;
+font-weight: 600;
+}
+input[type="range"] {
+width: 100%;
+cursor: pointer;
+height: 4px;
+background: var(--input-bg);
+border-radius: 2px;
+-webkit-appearance: none;
+border: 1px solid var(--border-color);
+}
+input[type="range"]::-webkit-slider-thumb {
+-webkit-appearance: none;
+width: 14px;
+height: 14px;
+background: var(--accent-color);
+border-radius: 50%;
+cursor: pointer;
+box-shadow: 0 0 5px rgba(0,0,0,0.5);
+transition: transform 0.1s;
+}
+input[type="range"]::-webkit-slider-thumb:hover {
+transform: scale(1.2);
+}
+select,
+input[type="file"] {
+width: 100%;
+padding: 10px;
+background: var(--input-bg);
+color: white;
+border: 1px solid var(--border-color);
+border-radius: 6px;
+font-size: 0.85rem;
+outline: none;
+transition: border-color 0.2s;
+}
+select:focus,
+input[type="file"]:focus {
+border-color: var(--accent-color);
+}
+input[type="file"]::file-selector-button {
+background: var(--border-color);
+color: var(--text-color);
+border: none;
+padding: 6px 12px;
+border-radius: 4px;
+cursor: pointer;
+margin-right: 10px;
+font-size: 0.8rem;
+transition: background 0.2s;
+}
+input[type="file"]::file-selector-button:hover {
+background: var(--accent-color);
+color: #fff;
+}
+.checkbox-control {
+display: flex;
+align-items: center;
+justify-content: space-between;
+background: var(--input-bg);
+padding: 10px;
+border-radius: 6px;
+border: 1px solid var(--border-color);
+margin-bottom: 5px;
+cursor: pointer;
+}
+.checkbox-control label {
+margin-bottom: 0;
+flex-grow: 1;
+cursor: pointer;
+font-weight: 500;
+}
+.checkbox-control input[type="checkbox"] {
+width: 16px;
+height: 16px;
+margin-left: 10px;
+accent-color: var(--accent-color);
+cursor: pointer;
+}
+.btn-group {
+display: grid;
+grid-template-columns: 1fr 1fr;
+gap: 12px;
+margin-top: 30px;
+}
+button {
+background: var(--accent-color);
+color: white;
+border: none;
+padding: 12px;
+border-radius: 6px;
+font-weight: 600;
+cursor: pointer;
+transition: background 0.2s, transform 0.1s;
+font-size: 0.9rem;
+letter-spacing: 0.5px;
+}
+button:hover {
+background: var(--accent-hover);
+}
+button.download {
+background-color: var(--success-color);
+}
+button.download:hover {
+background-color: var(--success-hover);
+}
+button:active {
+transform: translateY(2px);
+}
+.stage {
+flex: 1;
+background-color: #08090b;
+background-image:
+linear-gradient(45deg, #0e1014 25%, transparent 25%),
+linear-gradient(-45deg, #0e1014 25%, transparent 25%),
+linear-gradient(45deg, transparent 75%, #0e1014 75%),
+linear-gradient(-45deg, transparent 75%, #0e1014 75%);
+background-size: 30px 30px;
+background-position: 0 0, 0 15px, 15px -15px, -15px 0px;
+display: flex;
+justify-content: center;
+align-items: center;
+position: relative;
+overflow: auto;
+padding: 40px;
+}
+#canvas {
+display: block;
+object-fit: contain;
+box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+border: 1px solid #222;
+}
+#empty-state {
+color: #475569;
+text-align: center;
+font-family: monospace;
+font-size: 0.9rem;
+background: rgba(0,0,0,0.5);
+padding: 20px 40px;
+border-radius: 8px;
+border: 1px dashed #334155;
+margin: auto;
+}
+.view-controls {
+position: absolute;
+top: 20px;
+right: 20px;
+z-index: 20;
+display: none;
+gap: 5px;
+background: rgba(0,0,0,0.6);
+padding: 6px;
+border-radius: 8px;
+border: 1px solid var(--border-color);
+backdrop-filter: blur(4px);
+}
+.view-controls button {
+padding: 6px 12px;
+font-size: 0.75rem;
+background: transparent;
+color: #cbd5e1;
+margin: 0;
+border-radius: 4px;
+}
+.view-controls button.active {
+background: var(--accent-color);
+color: #fff;
+}
+.view-controls button:hover:not(.active) {
+background: rgba(255,255,255,0.1);
+}
+#cropper-ui {
+display: none;
+position: fixed;
+top: 0;
+left: 0;
+width: 100%;
+height: 100%;
+background: var(--bg-color);
+z-index: 9999;
+flex-direction: column;
+}
+.cropper-header {
+padding: 20px;
+border-bottom: 1px solid var(--border-color);
+display: flex;
+gap: 12px;
+align-items: center;
+background: var(--sidebar-bg);
+}
+.cropper-header h2 {
+margin: 0;
+font-size: 1.2rem;
+color: #fff;
+flex: 1;
+text-transform: uppercase;
+letter-spacing: 1.5px;
+}
+.cropper-header select {
+width: auto;
+min-width: 150px;
+}
+.cropper-header button {
+padding: 10px 16px;
+}
+.cropper-workspace {
+flex: 1;
+display: flex;
+justify-content: center;
+align-items: center;
+overflow: hidden;
+padding: 20px;
+background-image:
+linear-gradient(45deg, #0e1014 25%, transparent 25%),
+linear-gradient(-45deg, #0e1014 25%, transparent 25%),
+linear-gradient(45deg, transparent 75%, #0e1014 75%),
+linear-gradient(-45deg, transparent 75%, #0e1014 75%);
+background-size: 30px 30px;
+background-position: 0 0, 0 15px, 15px -15px, -15px 0px;
+}
+#crop-canvas {
+max-width: 100%;
+max-height: 100%;
+box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+cursor: crosshair;
+}
+</style>
+</head>
+<body>
+<div class="sidebar">
+<div>
+<h1>RetroMaker Pro</h1>
+<p class="subtitle">Image to Pixel Art Converter</p>
+</div>
+<div class="section-title">Image Input</div>
+<div class="control-group">
+<input type="file" id="upload" accept="image/*">
+<button id="btn-open-crop" style="width:100%; margin-top:10px; display:none; background:var(--input-bg); border:1px solid var(--border-color); color:#fff; font-weight:normal;">📐 Crop Image</button>
+</div>
+<div class="section-title">Resolution & Color</div>
+<div class="control-group">
+<label>Resolution<span class="value-display" id="resValue">320px</span></label>
+<input type="range" id="resolution" min="32" max="640" value="320" step="4">
+</div>
+<div class="control-group">
+<label>Color Palette</label>
+<select id="colorCount">
+<option value="FULL">Full Color (Original)</option>
+<option value="16">16 Colors (Retro Console)</option>
+<option value="32" selected>32 Colors (Arne32)</option>
+<option value="64">64 Colors (Extended)</option>
+<option value="128">125 Colors (5x5x5 RGB)</option>
+<option value="256">216 Colors (Web-Safe RGB)</option>
+<option value="BW">Black & White (1-bit)</option>
+<option value="GAMEBOY">Gameboy (4 Green)</option>
+</select>
+</div>
+<div class="control-group">
+<label class="checkbox-control" for="ditheringEnabled">
+<span>Enable Dithering</span>
+<input type="checkbox" id="ditheringEnabled" checked>
+</label>
+</div>
+<div class="section-title">Image Adjustments</div>
+<div class="control-group">
+<label>Contrast <span class="value-display" id="contrastValue">100%</span></label>
+<input type="range" id="contrast" min="0" max="200" value="100" step="1">
+</div>
+<div class="control-group">
+<label>Exposure <span class="value-display" id="exposureValue">100%</span></label>
+<input type="range" id="exposure" min="50" max="200" value="100" step="1">
+</div>
+<div class="control-group">
+<label>Saturation <span class="value-display" id="saturationValue">100%</span></label>
+<input type="range" id="saturation" min="0" max="200" value="100" step="1">
+</div>
+<div class="section-title">Retro Effects</div>
+<div class="control-group">
+<label>Scanlines <span class="value-display" id="scanlinesValue">0%</span></label>
+<input type="range" id="scanlines" min="0" max="100" value="0" step="1">
+</div>
+<div class="control-group">
+<label class="checkbox-control" for="crtEnabled">
+<span>CRT Vignette</span>
+<input type="checkbox" id="crtEnabled">
+</label>
+</div>
+<div class="section-title">Export Options</div>
+<div class="control-group">
+<label>Export Scale <span class="value-display" id="scaleValue">10x</span></label>
+<input type="range" id="exportScale" min="1" max="20" value="10" step="1">
+</div>
+<div class="btn-group">
+<button onclick="processImage()">Refresh</button>
+<button class="download" onclick="downloadImage()">Download</button>
+</div>
+</div>
+<div class="stage" id="stage">
+<div class="view-controls" id="view-controls">
+<button id="view-fit" class="active">Fit to Screen</button>
+<button id="view-orig">Original Size</button>
+</div>
+<div id="empty-state">
+Upload an image to begin<br><br>
+[No image selected]
+</div>
+<canvas id="canvas" style="display:none;"></canvas>
+</div>
+<div id="cropper-ui">
+<div class="cropper-header">
+<h2>Crop Image</h2>
+<select id="crop-aspect">
+<option value="free">Free Aspect</option>
+<option value="1">1:1 Square</option>
+<option value="1.333333">4:3 Standard</option>
+<option value="1.777777">16:9 Widescreen</option>
+</select>
+<button onclick="applyCrop()" style="background:var(--success-color);">Apply Crop</button>
+<button onclick="closeCropper()" style="background:#475569;">Cancel</button>
+<button onclick="resetCrop()" style="background:#ef4444;">Reset Source</button>
+</div>
+<div class="cropper-workspace">
+<canvas id="crop-canvas"></canvas>
+</div>
+</div>
+<script>
+const PALETTE_16 = [
+[0, 0, 0], [29, 43, 83], [126, 37, 83], [0, 135, 81],
+[171, 82, 54], [95, 87, 79], [194, 195, 199], [255, 241, 232],
+[255, 0, 77], [255, 163, 0], [255, 236, 39], [0, 228, 54],
+[41, 173, 255], [131, 118, 156], [255, 119, 168], [255, 204, 170]
+];
+const PALETTE_32 = [
+[0, 0, 0], [255, 255, 255], [157, 157, 157], [190, 38, 51],
+[224, 111, 139], [73, 60, 43], [164, 100, 34], [235, 137, 49],
+[247, 226, 107], [47, 72, 78], [68, 137, 26], [163, 206, 39],
+[27, 38, 50], [0, 87, 132], [49, 162, 242], [178, 220, 239],
+[52, 42, 151], [101, 109, 113], [204, 204, 204], [115, 41, 48],
+[203, 78, 80], [128, 50, 50], [255, 119, 168], [142, 63, 23],
+[242, 172, 88], [255, 205, 117], [163, 110, 205], [55, 21, 133],
+[81, 18, 124], [146, 35, 137], [228, 70, 207], [0, 135, 81]
+];
+const PALETTE_64 = [
+[6, 6, 8], [20, 16, 19], [59, 23, 37], [115, 23, 45],
+[180, 23, 30], [228, 59, 68], [244, 126, 123], [255, 214, 204],
+[156, 156, 156], [107, 107, 107], [57, 57, 57], [116, 63, 57],
+[185, 117, 99], [232, 168, 136], [247, 211, 194], [94, 77, 69],
+[54, 44, 38], [26, 20, 20], [20, 38, 56], [18, 78, 137],
+[38, 133, 186], [94, 188, 214], [174, 226, 227], [139, 172, 15],
+[75, 105, 47], [50, 60, 57], [25, 31, 29], [32, 46, 55],
+[58, 80, 67], [90, 128, 96], [147, 183, 100], [211, 230, 123],
+[229, 184, 188], [191, 121, 118], [142, 65, 71], [86, 21, 40],
+[44, 12, 24], [32, 40, 61], [58, 68, 102], [90, 105, 136],
+[139, 155, 180], [194, 211, 228], [255, 255, 255], [218, 224, 232],
+[159, 174, 191], [107, 118, 137], [63, 61, 86], [32, 23, 39],
+[25, 16, 25], [60, 32, 48], [104, 56, 108], [162, 109, 164],
+[213, 170, 219], [245, 230, 245], [20, 68, 102], [42, 109, 122],
+[123, 178, 78], [246, 214, 59], [237, 143, 33], [196, 73, 33],
+[117, 36, 56], [223, 132, 165], [154, 79, 80], [101, 42, 76]
+];
+const PALETTE_BW = [
+[0, 0, 0], [255, 255, 255]
+];
+const PALETTE_GAMEBOY = [
+[15, 56, 15], [48, 98, 48], [139, 172, 15], [155, 188, 15]
+];
+const PALETTE_128 = [];
+const steps128 = [0, 63, 127, 191, 255];
+for (let r of steps128) {
+for (let g of steps128) {
+for (let b of steps128) {
+PALETTE_128.push([r, g, b]);
+}
+}
+}
+const PALETTE_256 = [];
+const steps256 = [0, 51, 102, 153, 204, 255];
+for (let r of steps256) {
+for (let g of steps256) {
+for (let b of steps256) {
+PALETTE_256.push([r, g, b]);
+}
+}
+}
+const fileInput = document.getElementById('upload');
+const btnOpenCrop = document.getElementById('btn-open-crop');
+const resInput = document.getElementById('resolution');
+const resValue = document.getElementById('resValue');
+const colorSelect = document.getElementById('colorCount');
+const contrastInput = document.getElementById('contrast');
+const contrastValue = document.getElementById('contrastValue');
+const exposureInput = document.getElementById('exposure');
+const exposureValue = document.getElementById('exposureValue');
+const saturationInput = document.getElementById('saturation');
+const saturationValue = document.getElementById('saturationValue');
+const scanlinesInput = document.getElementById('scanlines');
+const scanlinesValue = document.getElementById('scanlinesValue');
+const crtCheckbox = document.getElementById('crtEnabled');
+const exportScaleInput = document.getElementById('exportScale');
+const scaleValue = document.getElementById('scaleValue');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const emptyState = document.getElementById('empty-state');
+const ditheringCheckbox = document.getElementById('ditheringEnabled');
+const viewControls = document.getElementById('view-controls');
+const btnViewFit = document.getElementById('view-fit');
+const btnViewOrig = document.getElementById('view-orig');
+const cropperUi = document.getElementById('cropper-ui');
+const cCanvas = document.getElementById('crop-canvas');
+const cCtx = cCanvas.getContext('2d');
+const cropAspectSelect = document.getElementById('crop-aspect');
+let masterImage = null;
+let originalImage = null;
+let viewMode = 'fit';
+let cropRect = null;
+let cropMode = null;
+let isCroppingAction = false;
+let cropDragStart = {x: 0, y: 0};
+let cropInitialRect = null;
+let lastProcessedData = null;
+let lastProcessedWidth = 0;
+let lastProcessedHeight = 0;
+function bindInputToDisplay(inputEl, displayEl, unit, processOnChange = true) {
+inputEl.addEventListener('input', (e) => {
+displayEl.innerText = e.target.value + unit;
+if (processOnChange && originalImage) processImage();
+});
+}
+function updateViewMode() {
+if (!lastProcessedData) return;
+if (viewMode === 'fit') {
+canvas.style.width = '90%';
+canvas.style.height = '90%';
+btnViewFit.classList.add('active');
+btnViewOrig.classList.remove('active');
+} else {
+const scale = parseInt(exportScaleInput.value);
+canvas.style.width = (lastProcessedWidth * scale) + 'px';
+canvas.style.height = (lastProcessedHeight * scale) + 'px';
+btnViewOrig.classList.add('active');
+btnViewFit.classList.remove('active');
+}
+}
+bindInputToDisplay(resInput, resValue, 'px');
+bindInputToDisplay(contrastInput, contrastValue, '%');
+bindInputToDisplay(exposureInput, exposureValue, '%');
+bindInputToDisplay(saturationInput, saturationValue, '%');
+bindInputToDisplay(scanlinesInput, scanlinesValue, '%');
+exportScaleInput.addEventListener('input', (e) => {
+scaleValue.innerText = e.target.value + 'x';
+if (viewMode === 'orig') updateViewMode();
+});
+colorSelect.addEventListener('change', () => { if (originalImage) processImage(); });
+ditheringCheckbox.addEventListener('change', () => { if (originalImage) processImage(); });
+crtCheckbox.addEventListener('change', () => { if (originalImage) processImage(); });
+btnViewFit.addEventListener('click', () => { viewMode = 'fit'; updateViewMode(); });
+btnViewOrig.addEventListener('click', () => { viewMode = 'orig'; updateViewMode(); });
+btnOpenCrop.addEventListener('click', openCropper);
+fileInput.addEventListener('change', (e) => {
+const file = e.target.files[0];
+if (!file) return;
+const reader = new FileReader();
+reader.onload = (event) => {
+const img = new Image();
+img.onload = () => {
+masterImage = img;
+originalImage = img;
+emptyState.style.display = 'none';
+canvas.style.display = 'block';
+viewControls.style.display = 'flex';
+btnOpenCrop.style.display = 'block';
+processImage();
+};
+img.src = event.target.result;
+};
+reader.readAsDataURL(file);
+});
+function getPalette() {
+const val = colorSelect.value;
+if (val === 'FULL') return null;
+if (val === '16') return PALETTE_16;
+if (val === '64') return PALETTE_64;
+if (val === '128') return PALETTE_128;
+if (val === '256') return PALETTE_256;
+if (val === 'BW') return PALETTE_BW;
+if (val === 'GAMEBOY') return PALETTE_GAMEBOY;
+return PALETTE_32;
+}
+function findNearestColor(r, g, b, palette) {
+let minDist = Infinity;
+let color = palette[0];
+for (let i = 0; i < palette.length; i++) {
+const p = palette[i];
+const dist = (r - p[0]) ** 2 + (g - p[1]) ** 2 + (b - p[2]) ** 2;
+if (dist < minDist) {
+minDist = dist;
+color = p;
+}
+}
+return color;
+}
+function processImage() {
+if (!originalImage) return;
+const targetWidth = parseInt(resInput.value);
+const scaleFactor = originalImage.width / targetWidth;
+const targetHeight = Math.floor(originalImage.height / scaleFactor);
+const tempCanvas = document.createElement('canvas');
+const tempCtx = tempCanvas.getContext('2d');
+tempCanvas.width = targetWidth;
+tempCanvas.height = targetHeight;
+tempCtx.drawImage(originalImage, 0, 0, targetWidth, targetHeight);
+const originalImageData = tempCtx.getImageData(0, 0, targetWidth, targetHeight);
+const originalPixels = originalImageData.data;
+const currentPalette = getPalette();
+const contrastFactor = parseFloat(contrastInput.value) / 100;
+const exposureFactor = parseFloat(exposureInput.value) / 100;
+const saturationFactor = parseFloat(saturationInput.value) / 100;
+const useDithering = ditheringCheckbox.checked && currentPalette !== null;
+const pixelWorkingBuffer = new Float32Array(targetWidth * targetHeight * 3);
+const outputData = new Uint8ClampedArray(originalPixels.length);
+for (let i = 0; i < originalPixels.length; i += 4) {
+const pixelBufferIndex = (i / 4) * 3;
+let r_val = originalPixels[i];
+let g_val = originalPixels[i + 1];
+let b_val = originalPixels[i + 2];
+const a_val = originalPixels[i + 3];
+r_val *= exposureFactor;
+g_val *= exposureFactor;
+b_val *= exposureFactor;
+r_val = (r_val - 128) * contrastFactor + 128;
+g_val = (g_val - 128) * contrastFactor + 128;
+b_val = (b_val - 128) * contrastFactor + 128;
+const luma = 0.299 * r_val + 0.587 * g_val + 0.114 * b_val;
+r_val = luma + (r_val - luma) * saturationFactor;
+g_val = luma + (g_val - luma) * saturationFactor;
+b_val = luma + (b_val - luma) * saturationFactor;
+pixelWorkingBuffer[pixelBufferIndex] = r_val;
+pixelWorkingBuffer[pixelBufferIndex + 1] = g_val;
+pixelWorkingBuffer[pixelBufferIndex + 2] = b_val;
+outputData[i + 3] = a_val;
+}
+for (let y = 0; y < targetHeight; y++) {
+for (let x = 0; x < targetWidth; x++) {
+const bufferIndex = (y * targetWidth + x) * 3;
+const dataIndex = (y * targetWidth + x) * 4;
+let r_current = pixelWorkingBuffer[bufferIndex];
+let g_current = pixelWorkingBuffer[bufferIndex + 1];
+let b_current = pixelWorkingBuffer[bufferIndex + 2];
+r_current = Math.min(255, Math.max(0, r_current));
+g_current = Math.min(255, Math.max(0, g_current));
+b_current = Math.min(255, Math.max(0, b_current));
+if (outputData[dataIndex + 3] === 0) {
+outputData[dataIndex] = 0;
+outputData[dataIndex + 1] = 0;
+outputData[dataIndex + 2] = 0;
+continue;
+}
+if (currentPalette !== null) {
+const nearestColor = findNearestColor(r_current, g_current, b_current, currentPalette);
+const errorR = r_current - nearestColor[0];
+const errorG = g_current - nearestColor[1];
+const errorB = b_current - nearestColor[2];
+outputData[dataIndex] = nearestColor[0];
+outputData[dataIndex + 1] = nearestColor[1];
+outputData[dataIndex + 2] = nearestColor[2];
+if (useDithering) {
+const diffuseError = (nx, ny, weight) => {
+if (nx >= 0 && nx < targetWidth && ny < targetHeight) {
+const neighborBufferIndex = (ny * targetWidth + nx) * 3;
+pixelWorkingBuffer[neighborBufferIndex] += errorR * weight;
+pixelWorkingBuffer[neighborBufferIndex + 1] += errorG * weight;
+pixelWorkingBuffer[neighborBufferIndex + 2] += errorB * weight;
+}
+};
+diffuseError(x + 1, y, 7 / 16);
+diffuseError(x - 1, y + 1, 3 / 16);
+diffuseError(x, y + 1, 5 / 16);
+diffuseError(x + 1, y + 1, 1 / 16);
+}
+} else {
+outputData[dataIndex] = Math.round(r_current);
+outputData[dataIndex + 1] = Math.round(g_current);
+outputData[dataIndex + 2] = Math.round(b_current);
+}
+}
+}
+const scanlineIntensity = parseInt(scanlinesInput.value) / 100;
+const scanlineMultiplier = 1 - scanlineIntensity;
+const useCrt = crtCheckbox.checked;
+if (scanlineIntensity > 0 || useCrt) {
+for (let y = 0; y < targetHeight; y++) {
+const isScanline = y % 2 !== 0;
+for (let x = 0; x < targetWidth; x++) {
+const dataIndex = (y * targetWidth + x) * 4;
+if (outputData[dataIndex + 3] === 0) continue;
+let r = outputData[dataIndex];
+let g = outputData[dataIndex + 1];
+let b = outputData[dataIndex + 2];
+if (isScanline && scanlineIntensity > 0) {
+r *= scanlineMultiplier;
+g *= scanlineMultiplier;
+b *= scanlineMultiplier;
+}
+if (useCrt) {
+const dx = x / targetWidth - 0.5;
+const dy = y / targetHeight - 0.5;
+const distSq = dx * dx + dy * dy;
+const vignette = Math.max(0, 1 - distSq * 1.5);
+r *= vignette;
+g *= vignette;
+b *= vignette;
+}
+outputData[dataIndex] = r;
+outputData[dataIndex + 1] = g;
+outputData[dataIndex + 2] = b;
+}
+}
+}
+lastProcessedData = outputData;
+lastProcessedWidth = targetWidth;
+lastProcessedHeight = targetHeight;
+let renderScale = Math.max(4, Math.ceil(2000 / targetWidth));
+canvas.width = targetWidth * renderScale;
+canvas.height = targetHeight * renderScale;
+const tempLowRes = document.createElement('canvas');
+tempLowRes.width = targetWidth;
+tempLowRes.height = targetHeight;
+tempLowRes.getContext('2d').putImageData(new ImageData(outputData, targetWidth, targetHeight), 0, 0);
+ctx.imageSmoothingEnabled = false;
+ctx.drawImage(tempLowRes, 0, 0, canvas.width, canvas.height);
+updateViewMode();
+}
+function downloadImage() {
+if (!lastProcessedData) return;
+const scale = parseInt(exportScaleInput.value);
+const finalWidth = lastProcessedWidth * scale;
+const finalHeight = lastProcessedHeight * scale;
+const exportCanvas = document.createElement('canvas');
+exportCanvas.width = finalWidth;
+exportCanvas.height = finalHeight;
+const eCtx = exportCanvas.getContext('2d');
+const tempLowRes = document.createElement('canvas');
+tempLowRes.width = lastProcessedWidth;
+tempLowRes.height = lastProcessedHeight;
+tempLowRes.getContext('2d').putImageData(new ImageData(lastProcessedData, lastProcessedWidth, lastProcessedHeight), 0, 0);
+eCtx.imageSmoothingEnabled = false;
+eCtx.drawImage(tempLowRes, 0, 0, finalWidth, finalHeight);
+const link = document.createElement('a');
+link.download = `pixelart-${finalWidth}x${finalHeight}-x${scale}.png`;
+link.href = exportCanvas.toDataURL();
+link.click();
+}
+function openCropper() {
+if (!masterImage) return;
+cropperUi.style.display = 'flex';
+cCanvas.width = masterImage.width;
+cCanvas.height = masterImage.height;
+cropRect = null;
+drawCropOverlay();
+}
+function closeCropper() {
+cropperUi.style.display = 'none';
+isCroppingAction = false;
+}
+function resetCrop() {
+if (!masterImage) return;
+originalImage = masterImage;
+closeCropper();
+processImage();
+}
+function applyCrop() {
+if (!cropRect || Math.abs(cropRect.w) < 10 || Math.abs(cropRect.h) < 10) {
+closeCropper();
+return;
+}
+const norm = normalizeRect(cropRect);
+const cx = Math.max(0, norm.x);
+const cy = Math.max(0, norm.y);
+const cw = Math.min(masterImage.width - cx, norm.w);
+const ch = Math.min(masterImage.height - cy, norm.h);
+const tc = document.createElement('canvas');
+tc.width = cw;
+tc.height = ch;
+const tCtx = tc.getContext('2d');
+tCtx.drawImage(masterImage, cx, cy, cw, ch, 0, 0, cw, ch);
+const newImg = new Image();
+newImg.onload = () => {
+originalImage = newImg;
+closeCropper();
+processImage();
+};
+newImg.src = tc.toDataURL();
+}
+function drawCropOverlay() {
+cCtx.clearRect(0, 0, cCanvas.width, cCanvas.height);
+cCtx.drawImage(masterImage, 0, 0);
+if (cropRect && (cropRect.w !== 0 || cropRect.h !== 0)) {
+const norm = normalizeRect(cropRect);
+cCtx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+cCtx.beginPath();
+cCtx.rect(0, 0, cCanvas.width, cCanvas.height);
+cCtx.rect(norm.x, norm.y, norm.w, norm.h);
+cCtx.fill('evenodd');
+cCtx.strokeStyle = '#fff';
+cCtx.lineWidth = Math.max(2, cCanvas.width / cCanvas.clientWidth * 2);
+cCtx.setLineDash([15, 10]);
+cCtx.strokeRect(norm.x, norm.y, norm.w, norm.h);
+} else {
+cCtx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+cCtx.fillRect(0, 0, cCanvas.width, cCanvas.height);
+}
+}
+function getCropMousePos(evt) {
+const rect = cCanvas.getBoundingClientRect();
+const scaleX = cCanvas.width / rect.width;
+const scaleY = cCanvas.height / rect.height;
+return {
+x: (evt.clientX - rect.left) * scaleX,
+y: (evt.clientY - rect.top) * scaleY
+};
+}
+function normalizeRect(rect) {
+let rx = rect.w < 0 ? rect.x + rect.w : rect.x;
+let ry = rect.h < 0 ? rect.y + rect.h : rect.y;
+let rw = Math.abs(rect.w);
+let rh = Math.abs(rect.h);
+return { x: rx, y: ry, w: rw, h: rh };
+}
+function isPointInRect(pt, rect) {
+if (!rect) return false;
+const norm = normalizeRect(rect);
+return pt.x >= norm.x && pt.x <= norm.x + norm.w && pt.y >= norm.y && pt.y <= norm.y + norm.h;
+}
+cCanvas.addEventListener('mousedown', (e) => {
+const pos = getCropMousePos(e);
+cropDragStart = pos;
+isCroppingAction = true;
+if (cropRect && isPointInRect(pos, cropRect)) {
+cropMode = 'move';
+cropInitialRect = normalizeRect(cropRect);
+} else {
+cropMode = 'draw';
+cropRect = { x: pos.x, y: pos.y, w: 0, h: 0 };
+}
+});
+window.addEventListener('mousemove', (e) => {
+if (!isCroppingAction) return;
+const pos = getCropMousePos(e);
+if (cropMode === 'move') {
+let dx = pos.x - cropDragStart.x;
+let dy = pos.y - cropDragStart.y;
+let nx = cropInitialRect.x + dx;
+let ny = cropInitialRect.y + dy;
+nx = Math.max(0, Math.min(cCanvas.width - cropInitialRect.w, nx));
+ny = Math.max(0, Math.min(cCanvas.height - cropInitialRect.h, ny));
+cropRect = { x: nx, y: ny, w: cropInitialRect.w, h: cropInitialRect.h };
+} else if (cropMode === 'draw') {
+let dx = pos.x - cropDragStart.x;
+let dy = pos.y - cropDragStart.y;
+const aspectVal = cropAspectSelect.value;
+if (aspectVal !== 'free') {
+const ratio = parseFloat(aspectVal);
+if (Math.abs(dx) / Math.abs(dy) > ratio) {
+dy = Math.sign(dy) * (Math.abs(dx) / ratio) || dy;
+} else {
+dx = Math.sign(dx) * (Math.abs(dy) * ratio) || dx;
+}
+}
+cropRect.w = dx;
+cropRect.h = dy;
+}
+drawCropOverlay();
+});
+window.addEventListener('mouseup', () => {
+if (!isCroppingAction) return;
+isCroppingAction = false;
+if (cropRect) cropRect = normalizeRect(cropRect);
+drawCropOverlay();
+});
+cropAspectSelect.addEventListener('change', () => {
+if (cropRect) {
+const norm = normalizeRect(cropRect);
+const aspectVal = cropAspectSelect.value;
+if (aspectVal !== 'free') {
+const ratio = parseFloat(aspectVal);
+const currentRatio = norm.w / norm.h;
+if (currentRatio > ratio) {
+norm.w = norm.h * ratio;
+} else {
+norm.h = norm.w / ratio;
+}
+cropRect = norm;
+drawCropOverlay();
+}
+}
+});
+</script>
+</body>
+</html>
