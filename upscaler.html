@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Detail Enhancer</title>
+<style>
+:root {
+  --bg: #0f0f11;
+  --card: #1a1a1d;
+  --text: #e0e0e0;
+  --accent: #00d2ff;
+  --accent-hover: #3a7bd5;
+}
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  margin: 0;
+  height: 100vh;
+  box-sizing: border-box;
+}
+.container {
+  display: flex;
+  gap: 15px;
+  height: 100%;
+  width: 100%;
+  background: var(--card);
+  padding: 12px;
+  border-radius: 10px;
+  box-sizing: border-box;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+  border: 1px solid #2a2a2d;
+}
+.sidebar {
+  flex: 0 0 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+}
+h1 {
+  text-align: center;
+  margin: 0 0 5px 0;
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 1px;
+}
+.upload-area {
+  border: 2px dashed #444;
+  padding: 20px 10px;
+  text-align: center;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: 0.3s;
+  background: #141416;
+  font-size: 0.9rem;
+}
+.upload-area:hover {
+  border-color: var(--accent);
+  background: #1a1a1d;
+}
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  padding: 15px;
+  background: #1f1f23;
+  border-radius: 8px;
+  border: 1px solid #2a2a2d;
+}
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+label {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: #ccc;
+  display: flex;
+  justify-content: space-between;
+}
+input[type="range"] {
+  width: 100%;
+  cursor: pointer;
+  accent-color: var(--accent);
+  margin: 5px 0 0 0;
+}
+.buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: auto;
+}
+.btn {
+  padding: 12px;
+  border: none;
+  border-radius: 6px;
+  font-weight: bold;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+  text-align: center;
+  width: 100%;
+  box-sizing: border-box;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.btn-primary { background: var(--accent); color: #000; }
+.btn-primary:hover { background: var(--accent-hover); color: #fff; }
+.btn-primary:disabled { background: #333; color: #666; cursor: not-allowed; }
+.btn-success { background: #00e676; color: #000; display: none; }
+.btn-success:hover { background: #00c853; }
+select {
+  padding: 8px;
+  background: #2a2a2d;
+  color: white;
+  border: 1px solid #444;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  width: 100%;
+  cursor: pointer;
+}
+.preview-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.preview-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.status {
+  color: #aaa;
+  font-family: monospace;
+  font-size: 0.9rem;
+}
+.canvas-wrapper {
+  flex: 1;
+  overflow: auto;
+  border: 1px solid #2a2a2d;
+  background: #000;
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  border-radius: 6px;
+}
+.canvas-wrapper.fit-to-screen { overflow: hidden; }
+.canvas-wrapper.fit-to-screen canvas {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto !important;
+  height: auto !important;
+  object-fit: contain;
+}
+canvas {
+  max-width: none;
+  display: block;
+  box-shadow: 0 0 20px rgba(0,0,0,0.8);
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="sidebar">
+    <h1>AI ENHANCER</h1>
+    
+    <div class="upload-area" onclick="document.getElementById('fileIn').click()" id="dropZone">
+      <p style="margin: 0;"><strong>Klikk</strong> eller dra AI-bilde hit</p>
+      <input type="file" id="fileIn" accept="image/*" style="display:none">
+    </div>
+
+    <div class="controls">
+      <div class="control-group">
+        <label>1. Skarphet (Sharpen) <span id="sharpVal">1.5</span></label>
+        <input type="range" id="sharpRange" min="0" max="4" value="1.5" step="0.1">
+      </div>
+      
+      <div class="control-group">
+        <label>2. Kontrast <span id="contrastVal">105%</span></label>
+        <input type="range" id="contrastRange" min="100" max="150" value="105" step="1">
+      </div>
+
+      <div class="control-group">
+        <label>3. Fargemetning <span id="satVal">110%</span></label>
+        <input type="range" id="satRange" min="100" max="200" value="110" step="5">
+      </div>
+
+      <div class="control-group">
+        <label>4. Oppskalering</label>
+        <select id="scaleSelect">
+          <option value="1">1x (Kun Forbedring)</option>
+          <option value="2" selected>2x Upscale</option>
+          <option value="3">3x Upscale</option>
+          <option value="4">4x Upscale</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="buttons">
+      <button id="processBtn" class="btn btn-primary" disabled>Behandle Bilde</button>
+      <a id="downloadLink" class="btn btn-success">Last Ned Resultat</a>
+    </div>
+  </div>
+
+  <div class="preview-panel">
+    <div class="preview-controls">
+      <div class="status" id="status">Venter på bilde...</div>
+      <button id="fitScreenBtn" class="btn btn-primary" style="width: auto; padding: 6px 12px; font-size: 0.8rem;">Tilpass skjerm</button>
+    </div>
+    <div class="canvas-wrapper" id="canvasWrapper">
+      <canvas id="canvas"></canvas>
+    </div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const fileIn = document.getElementById('fileIn');
+const dropZone = document.getElementById('dropZone');
+const processBtn = document.getElementById('processBtn');
+const downloadLink = document.getElementById('downloadLink');
+const status = document.getElementById('status');
+const canvasWrapper = document.getElementById('canvasWrapper');
+const fitScreenBtn = document.getElementById('fitScreenBtn');
+
+const els = {
+  sharp: document.getElementById('sharpRange'),
+  contrast: document.getElementById('contrastRange'),
+  sat: document.getElementById('satRange'),
+  scale: document.getElementById('scaleSelect')
+};
+
+let originalImg = new Image();
+let originalFileName = "image";
+let isLoaded = false;
+let isFitToScreen = false;
+
+// Oppdater verdier i menyen
+els.sharp.oninput = (e) => document.getElementById('sharpVal').innerText = e.target.value;
+els.contrast.oninput = (e) => document.getElementById('contrastVal').innerText = e.target.value + '%';
+els.sat.oninput = (e) => document.getElementById('satVal').innerText = e.target.value + '%';
+
+fitScreenBtn.addEventListener('click', () => {
+  isFitToScreen = !isFitToScreen;
+  canvasWrapper.classList.toggle('fit-to-screen', isFitToScreen);
+  fitScreenBtn.textContent = isFitToScreen ? 'Vis Faktisk Størrelse' : 'Tilpass skjerm';
+});
+
+function handleFile(file) {
+  if (!file) return;
+  originalFileName = file.name.split('.').slice(0, -1).join('.');
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    originalImg.onload = () => {
+      canvas.width = originalImg.width;
+      canvas.height = originalImg.height;
+      ctx.drawImage(originalImg, 0, 0);
+      isLoaded = true;
+      processBtn.disabled = false;
+      status.innerText = `Lastet inn: ${originalImg.width}x${originalImg.height}px`;
+      downloadLink.style.display = 'none';
+      if (isFitToScreen) fitScreenBtn.click();
+    }
+    originalImg.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+fileIn.addEventListener('change', e => handleFile(e.target.files[0]));
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.borderColor = '#00d2ff'; });
+dropZone.addEventListener('dragleave', e => { e.preventDefault(); dropZone.style.borderColor = '#444'; });
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.style.borderColor = '#444';
+  handleFile(e.dataTransfer.files[0]);
+});
+
+processBtn.addEventListener('click', async () => {
+  if (!isLoaded) return;
+  status.innerText = "Behandler bilde... (High-Quality Upscale)";
+  processBtn.disabled = true;
+  downloadLink.style.display = 'none';
+  
+  // Tvinger nettleseren til å tegne statusen før vi låser tråden
+  await new Promise(r => setTimeout(r, 50));
+
+  try {
+    const scale = parseInt(els.scale.value);
+    const sharpAmt = parseFloat(els.sharp.value);
+    const contrastVal = parseInt(els.contrast.value);
+    const satVal = parseInt(els.sat.value);
+    
+    const targetW = Math.round(originalImg.width * scale);
+    const targetH = Math.round(originalImg.height * scale);
+
+    const bufferCanvas = document.createElement('canvas');
+    bufferCanvas.width = targetW;
+    bufferCanvas.height = targetH;
+    const bCtx = bufferCanvas.getContext('2d', { willReadFrequently: true });
+    
+    // Aktiverer høyeste kvalitet på nettleserens innebygde skalering
+    bCtx.imageSmoothingEnabled = true;
+    bCtx.imageSmoothingQuality = 'high';
+
+    // CSS Filters for farge og kontrast (kjøres RASKT av GPU)
+    bCtx.filter = `contrast(${contrastVal}%) saturate(${satVal}%)`;
+    
+    let bitmap;
+    try {
+      bitmap = await createImageBitmap(originalImg, {
+        resizeWidth: targetW,
+        resizeHeight: targetH,
+        resizeQuality: 'high'
+      });
+      bCtx.drawImage(bitmap, 0, 0);
+    } catch (err) {
+      bCtx.drawImage(originalImg, 0, 0, targetW, targetH);
+    }
+
+    // Slår av filter før vi kjører matematisk Sharpen
+    bCtx.filter = 'none';
+
+    // Kjører Custom Sharpen hvis verdien er over 0
+    if (sharpAmt > 0) {
+      const imgData = bCtx.getImageData(0, 0, targetW, targetH);
+      const sharpenedData = applySharpenKernel(imgData, targetW, targetH, sharpAmt);
+      bCtx.putImageData(sharpenedData, 0, 0);
+    }
+
+    // Tegner over til hoved-canvas
+    canvas.width = targetW;
+    canvas.height = targetH;
+    ctx.drawImage(bufferCanvas, 0, 0);
+
+    // Klargjør nedlasting
+    downloadLink.href = canvas.toDataURL("image/png");
+    downloadLink.download = `${originalFileName}_Enhanced_x${scale}.png`;
+    downloadLink.style.display = "block";
+    status.innerText = `✅ Ferdig! (${targetW}x${targetH}px)`;
+
+  } catch (error) {
+    console.error(error);
+    status.innerText = "❌ Feil under behandling.";
+  } finally {
+    processBtn.disabled = false;
+  }
+});
+
+// Forbedret Convolution Kernel for skarpere detaljer uten "bloom"
+function applySharpenKernel(imgData, w, h, amount) {
+  const src = imgData.data;
+  const output = new ImageData(w, h);
+  const dst = output.data;
+  dst.set(src);
+  
+  // Justerer intensiteten (mindre aggressiv enn før)
+  const amountAdjusted = amount / 3; 
+  const w4 = w * 4;
+  
+  for (let y = 1; y < h - 1; y++) {
+    let idx = (y * w + 1) * 4;
+    for (let x = 1; x < w - 1; x++) {
+      for (let c = 0; c < 3; c++) {
+        const val = src[idx + c];
+        // Standard High-Pass Edge Detection
+        const edge = (8 * val)
+          - src[idx - w4 - 4 + c] - src[idx - w4 + c] - src[idx - w4 + 4 + c]
+          - src[idx - 4 + c]                          - src[idx + 4 + c]
+          - src[idx + w4 - 4 + c] - src[idx + w4 + c] - src[idx + w4 + 4 + c];
+        
+        // Blander originalen med kantene basert på "Amount"
+        dst[idx + c] = val + (edge * amountAdjusted);
+      }
+      idx += 4;
+    }
+  }
+  return output;
+}
+</script>
+</body>
+</html>
